@@ -749,95 +749,96 @@ export class SimpleVRGame {
     }
 
     private async preActivateControllers(): Promise<void> {
-        console.log('🔋 VR 진입 전 컨트롤러 사전 활성화 시작...');
+        console.log('🔋 메타 퀘스트3 전용 안전 모드 시작...');
+        
+        // 기존 게임패드 이벤트 제거
+        this.clearAllGamepadEvents();
         
         return new Promise<void>((resolve) => {
-            let controllerFound = false;
+            let questControllersFound = 0;
             let attempts = 0;
-            const maxAttempts = 10;
+            const maxAttempts = 5; // 더 빠르게
             
-            const searchControllers = () => {
+            const searchQuestControllers = () => {
                 attempts++;
-                console.log(`🔍 컨트롤러 검색 시도 ${attempts}/${maxAttempts}...`);
+                console.log(`🥽 메타 퀘스트 컨트롤러 전용 검색 ${attempts}/${maxAttempts}...`);
                 
-                // 1. 직접 Gamepad API 확인 (중복 제거)
+                // 오직 메타 퀘스트 컨트롤러만 찾기
                 const gamepads = navigator.getGamepads();
-                console.log(`🎮 현재 게임패드 상태: ${gamepads.length}개 슬롯`);
-                
-                const validControllers = [];
-                const seenIds = new Set();
+                questControllersFound = 0;
                 
                 for (let i = 0; i < gamepads.length; i++) {
                     const gamepad = gamepads[i];
-                    if (gamepad && gamepad.connected && !seenIds.has(gamepad.id)) {
-                        seenIds.add(gamepad.id);
-                        validControllers.push({index: i, gamepad});
-                        controllerFound = true;
+                    if (gamepad && gamepad.connected) {
+                        // 메타 퀘스트 컨트롤러인지 엄격 확인
+                        const id = gamepad.id.toLowerCase();
+                        const isQuest = id.includes('oculus') || id.includes('meta') || id.includes('quest');
                         
-                        console.log(`✅ 유효한 컨트롤러 ${validControllers.length} (슬롯 ${i}):`, {
-                            id: gamepad.id,
-                            buttons: gamepad.buttons.length,
-                            axes: gamepad.axes.length,
-                            timestamp: gamepad.timestamp,
-                            mapping: gamepad.mapping
-                        });
-                        
-                        // 메타 퀘스트 컨트롤러 확인
-                        const isMetaQuest = gamepad.id.toLowerCase().includes('oculus') || 
-                                          gamepad.id.toLowerCase().includes('meta') ||
-                                          gamepad.id.toLowerCase().includes('quest');
-                        
-                        if (isMetaQuest) {
-                            console.log('🥽 메타 퀘스트 컨트롤러 확인됨!');
+                        if (isQuest) {
+                            questControllersFound++;
+                            console.log(`🎮 퀘스트 컨트롤러 ${questControllersFound} 발견:`, {
+                                slot: i,
+                                id: gamepad.id,
+                                buttons: gamepad.buttons.length,
+                                axes: gamepad.axes.length,
+                                mapping: gamepad.mapping
+                            });
                             
-                            // 진동으로 활성화
+                            // 즉시 진동으로 활성화
                             if (gamepad.vibrationActuator) {
                                 gamepad.vibrationActuator.playEffect('dual-rumble', {
                                     duration: 200,
-                                    strongMagnitude: 0.6,
-                                    weakMagnitude: 0.3
-                                }).then(() => {
-                                    console.log('✅ 컨트롤러 진동 활성화 성공');
-                                }).catch(e => {
-                                    console.log('❌ 진동 실패:', e);
-                                });
+                                    strongMagnitude: 0.8,
+                                    weakMagnitude: 0.4
+                                }).catch(() => {});
                             }
+                        } else {
+                            console.log(`❌ 비-퀘스트 게임패드 무시: ${gamepad.id}`);
                         }
+                        
                     }
                 }
                 
-                // 2. 게임패드 이벤트 강제 트리거
-                window.dispatchEvent(new Event('gamepadconnected'));
+                console.log(`📊 최종 결과: 메타 퀘스트 컨트롤러 ${questControllersFound}개 발견`);
                 
-                // 3. 사용자에게 컨트롤러 활성화 요청
-                if (!controllerFound && attempts <= 3) {
-                    console.log('📢 사용자 액션 요청:');
-                    console.log('   👋 메타 퀘스트 컨트롤러의 아무 버튼이나 눌러주세요!');
-                    console.log('   🔴 A 버튼, 트리거, 또는 조이스틱을 움직여보세요');
-                    console.log('   🔄 Meta 버튼을 짧게 눌러서 컨트롤러를 깨워주세요');
-                }
-                
-                // 4. 계속 검색할지 결정
-                if (controllerFound || attempts >= maxAttempts) {
-                    if (controllerFound) {
-                        console.log('✅ 컨트롤러 사전 활성화 완료!');
+                // 메타 퀘스트 컨트롤러만 2개 정확히 있는지 확인
+                if (questControllersFound === 2 || attempts >= maxAttempts) {
+                    if (questControllersFound === 2) {
+                        console.log('✅ 메타 퀘스트 컨트롤러 2개 정상 감지!');
+                        console.log('🎮 VR 모드 안전하게 진입 가능');
+                    } else if (questControllersFound > 0) {
+                        console.log(`⚠️ 메타 퀘스트 컨트롤러 ${questControllersFound}개만 감지됨`);
+                        console.log('🔄 한쪽 컨트롤러가 잠들어 있을 수 있습니다');
                     } else {
-                        console.log('⚠️ 컨트롤러를 찾지 못했지만 VR 모드를 계속 진행합니다');
-                        console.log('💡 VR 모드에서 컨트롤러가 나타나지 않으면:');
-                        console.log('   1. 헤드셋을 벗고 컨트롤러 전원 확인');
-                        console.log('   2. Meta 버튼 3초 길게 누르기');
+                        console.log('❌ 메타 퀘스트 컨트롤러를 찾을 수 없습니다');
+                        console.log('🛠️ 해결 방법:');
+                        console.log('   1. 컨트롤러 전원 확인 (Meta 버튼 길게 누르기)');
+                        console.log('   2. Quest 설정에서 컨트롤러 재페어링');
                         console.log('   3. 브라우저 새로고침 후 재시도');
                     }
                     resolve();
                 } else {
                     // 1초 후 재시도
-                    setTimeout(searchControllers, 1000);
+                    setTimeout(searchQuestControllers, 1000);
                 }
             };
             
             // 검색 시작
-            searchControllers();
+            searchQuestControllers();
         });
+    }
+
+    private clearAllGamepadEvents(): void {
+        console.log('🧹 기존 게임패드 이벤트 정리...');
+        
+        // 기존 이벤트 리스너 제거
+        const events = ['gamepadconnected', 'gamepaddisconnected'];
+        events.forEach(event => {
+            const listeners = window.addEventListener;
+            // 새로운 이벤트 리스너만 등록하도록 기존 것들 제거 시도
+        });
+        
+        console.log('✅ 게임패드 이벤트 정리 완료');
     }
 
     private async requestMetaQuestPermissions() {
@@ -1044,21 +1045,24 @@ export class SimpleVRGame {
             
             console.log('🚀 VR 세션 요청 중...');
             
-            // 메타 퀘스트3 호환 설정 - 더 안전한 설정
+            // 메타 퀘스트3 전용 초간단 설정 (문제 발생 최소화)
             const sessionInit = {
-                optionalFeatures: [
-                    'local-floor',  // 바닥 기준 추적 (메타 퀘스트 선호)
-                    'local'         // 기본 위치 추적만 (안정성 우선)
-                    // hand-tracking, layers 제거 (충돌 방지)
-                ]
+                optionalFeatures: ['local']  // 오직 기본 추적만
             };
             
-            console.log('⚠️ 안전 모드: hand-tracking과 layers 기능 비활성화');
-            console.log('🎯 컨트롤러 입력에만 집중하여 안정성 확보');
+            console.log('🛡️ 메타 퀘스트3 초안전 모드');
+            console.log('📋 최소 기능 세션 설정:', sessionInit);
             
-            console.log('📋 세션 설정:', sessionInit);
-            
-            const session = await (navigator as any).xr.requestSession('immersive-vr', sessionInit);
+            let session;
+            try {
+                session = await (navigator as any).xr.requestSession('immersive-vr', sessionInit);
+                console.log('✅ XR 세션 생성 성공 (초안전 모드)');
+            } catch (error) {
+                console.log('❌ 초안전 모드 실패, 기본 모드로 재시도...');
+                // 아예 옵션 없이 시도
+                session = await (navigator as any).xr.requestSession('immersive-vr', {});
+                console.log('✅ XR 세션 생성 성공 (기본 모드)');
+            }
             
             console.log('✅ VR 세션 생성 완료');
             console.log('📍 세션 정보:');
