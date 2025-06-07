@@ -15,7 +15,7 @@ export class VRController {
     private rightController: BABYLON.WebXRInputSource | null = null;
     
     // 이동 설정
-    private moveSpeed: number = 3.0; // m/s
+    private moveSpeed: number = 6.0; // m/s (조이스틱 이동 속도 증가)
     private turnSpeed: number = Math.PI; // 라디안/초
     private teleportMaxDistance: number = 10.0; // 최대 텔레포트 거리
     
@@ -49,6 +49,19 @@ export class VRController {
                 optionalFeatures: true
             });
 
+            // WebXR locomotion 시스템 활성화 (조이스틱 이동)
+            const featureManager = this.xrHelper.baseExperience.featuresManager;
+            try {
+                const locomotion = featureManager.enableFeature(BABYLON.WebXRFeatureName.MOVEMENT, "latest", {
+                    xrInput: this.xrHelper.input,
+                    movementEnabled: true,
+                    rotationEnabled: true
+                });
+                console.log('🚶 WebXR Locomotion 활성화됨');
+            } catch (error) {
+                console.log('⚠️ WebXR Locomotion 활성화 실패, 수동 구현 사용:', error);
+            }
+
             // 포인터 선택 설정
             if (this.xrHelper.pointerSelection) {
                 this.xrHelper.pointerSelection.displayLaserPointer = true;
@@ -56,10 +69,14 @@ export class VRController {
             }
 
             // 핸드 트래킹 활성화
-            const featureManager = this.xrHelper.baseExperience.featuresManager;
-            featureManager.enableFeature(BABYLON.WebXRFeatureName.HAND_TRACKING, "latest", {
-                xrInput: this.xrHelper.input,
-            }, true, false);
+            try {
+                featureManager.enableFeature(BABYLON.WebXRFeatureName.HAND_TRACKING, "latest", {
+                    xrInput: this.xrHelper.input,
+                }, true, false);
+                console.log('🤚 핸드 트래킹 활성화됨');
+            } catch (error) {
+                console.log('⚠️ 핸드 트래킹 활성화 실패 (선택사항):', error);
+            }
 
             // 컨트롤러 설정
             this.setupControllers();
@@ -189,19 +206,37 @@ export class VRController {
 
     private processMovementInput(moveX: number, moveZ: number): void {
         // 데드존 적용
-        const deadzone = 0.1;
+        const deadzone = 0.15;
         const absX = Math.abs(moveX);
         const absZ = Math.abs(moveZ);
         
         if (absX > deadzone || absZ > deadzone) {
-            // 카메라 방향 기준으로 이동
-            const cameraDirection = this.camera.getDirection(BABYLON.Vector3.Forward());
-            const forward = new BABYLON.Vector3(cameraDirection.x, 0, cameraDirection.z).normalize();
-            const right = BABYLON.Vector3.Cross(forward, BABYLON.Vector3.Up()).normalize();
-            
-            // 이동 벡터 계산
-            this.velocity = forward.scale(-moveZ).add(right.scale(moveX)).scale(this.moveSpeed);
-            this.isMoving = true;
+            // VR 모드에서는 XR 카메라의 position을 직접 조작
+            if (this.xrHelper && this.xrHelper.baseExperience.camera) {
+                const xrCamera = this.xrHelper.baseExperience.camera;
+                
+                // XR 카메라의 방향 기준으로 이동 계산
+                const forward = xrCamera.getDirection(BABYLON.Vector3.Forward());
+                forward.y = 0; // Y축 고정 (수평 이동만)
+                forward.normalize();
+                
+                const right = BABYLON.Vector3.Cross(forward, BABYLON.Vector3.Up()).normalize();
+                
+                // 이동 벡터 계산 (조이스틱 입력 반전)
+                const movement = forward.scale(-moveZ).add(right.scale(moveX));
+                this.velocity = movement.scale(this.moveSpeed);
+                this.isMoving = true;
+                
+                console.log(`🎮 조이스틱 이동: X=${moveX.toFixed(2)}, Z=${moveZ.toFixed(2)}`);
+            } else {
+                // 일반 카메라 모드
+                const cameraDirection = this.camera.getDirection(BABYLON.Vector3.Forward());
+                const forward = new BABYLON.Vector3(cameraDirection.x, 0, cameraDirection.z).normalize();
+                const right = BABYLON.Vector3.Cross(forward, BABYLON.Vector3.Up()).normalize();
+                
+                this.velocity = forward.scale(-moveZ).add(right.scale(moveX)).scale(this.moveSpeed);
+                this.isMoving = true;
+            }
         } else {
             this.velocity = BABYLON.Vector3.Zero();
             this.isMoving = false;
@@ -326,18 +361,35 @@ export class VRController {
     }
 
     private updateMovement(): void {
-        if (this.isMoving) {
+        if (this.isMoving && this.velocity.length() > 0) {
             // 프레임 시간 계산
             const deltaTime = this.engine.getDeltaTime() / 1000; // 초 단위
-            
-            // 카메라 위치 업데이트
             const movement = this.velocity.scale(deltaTime);
-            this.camera.position.addInPlace(movement);
             
-            // 경계 체크 (맵 제한)
-            this.camera.position.x = BABYLON.Scalar.Clamp(this.camera.position.x, -10, 10);
-            this.camera.position.z = BABYLON.Scalar.Clamp(this.camera.position.z, -10, 10);
-            this.camera.position.y = Math.max(1.6, this.camera.position.y); // 최소 높이
+            // VR 모드와 일반 모드 구분해서 카메라 이동
+            if (this.xrHelper && this.xrHelper.baseExperience.camera) {
+                // VR 모드: XR 카메라 이동
+                const xrCamera = this.xrHelper.baseExperience.camera;
+                const newPosition = xrCamera.position.add(movement);
+                
+                // 경계 체크 적용
+                newPosition.x = BABYLON.Scalar.Clamp(newPosition.x, -15, 15);
+                newPosition.z = BABYLON.Scalar.Clamp(newPosition.z, -15, 15);
+                newPosition.y = Math.max(0.1, newPosition.y); // 바닥 아래로 가지 않도록
+                
+                // XR 카메라 위치 직접 설정
+                xrCamera.position.copyFrom(newPosition);
+                
+                console.log(`🚶 VR 이동: ${newPosition.x.toFixed(2)}, ${newPosition.y.toFixed(2)}, ${newPosition.z.toFixed(2)}`);
+            } else {
+                // 일반 모드: 기본 카메라 이동
+                this.camera.position.addInPlace(movement);
+                
+                // 경계 체크 (맵 제한)
+                this.camera.position.x = BABYLON.Scalar.Clamp(this.camera.position.x, -15, 15);
+                this.camera.position.z = BABYLON.Scalar.Clamp(this.camera.position.z, -15, 15);  
+                this.camera.position.y = Math.max(1.6, this.camera.position.y); // 최소 높이
+            }
         }
         
         // 회전 쿨다운 감소
