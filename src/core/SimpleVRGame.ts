@@ -748,6 +748,91 @@ export class SimpleVRGame {
         }
     }
 
+    private async preActivateControllers(): Promise<void> {
+        console.log('🔋 VR 진입 전 컨트롤러 사전 활성화 시작...');
+        
+        return new Promise<void>((resolve) => {
+            let controllerFound = false;
+            let attempts = 0;
+            const maxAttempts = 10;
+            
+            const searchControllers = () => {
+                attempts++;
+                console.log(`🔍 컨트롤러 검색 시도 ${attempts}/${maxAttempts}...`);
+                
+                // 1. 직접 Gamepad API 확인
+                const gamepads = navigator.getGamepads();
+                console.log(`🎮 현재 게임패드 상태: ${gamepads.length}개 슬롯`);
+                
+                for (let i = 0; i < gamepads.length; i++) {
+                    const gamepad = gamepads[i];
+                    if (gamepad && gamepad.connected) {
+                        controllerFound = true;
+                        console.log(`✅ 컨트롤러 ${i} 발견!`, {
+                            id: gamepad.id,
+                            buttons: gamepad.buttons.length,
+                            axes: gamepad.axes.length,
+                            timestamp: gamepad.timestamp
+                        });
+                        
+                        // 메타 퀘스트 컨트롤러 확인
+                        const isMetaQuest = gamepad.id.toLowerCase().includes('oculus') || 
+                                          gamepad.id.toLowerCase().includes('meta') ||
+                                          gamepad.id.toLowerCase().includes('quest');
+                        
+                        if (isMetaQuest) {
+                            console.log('🥽 메타 퀘스트 컨트롤러 확인됨!');
+                            
+                            // 진동으로 활성화
+                            if (gamepad.vibrationActuator) {
+                                gamepad.vibrationActuator.playEffect('dual-rumble', {
+                                    duration: 200,
+                                    strongMagnitude: 0.6,
+                                    weakMagnitude: 0.3
+                                }).then(() => {
+                                    console.log('✅ 컨트롤러 진동 활성화 성공');
+                                }).catch(e => {
+                                    console.log('❌ 진동 실패:', e);
+                                });
+                            }
+                        }
+                    }
+                }
+                
+                // 2. 게임패드 이벤트 강제 트리거
+                window.dispatchEvent(new Event('gamepadconnected'));
+                
+                // 3. 사용자에게 컨트롤러 활성화 요청
+                if (!controllerFound && attempts <= 3) {
+                    console.log('📢 사용자 액션 요청:');
+                    console.log('   👋 메타 퀘스트 컨트롤러의 아무 버튼이나 눌러주세요!');
+                    console.log('   🔴 A 버튼, 트리거, 또는 조이스틱을 움직여보세요');
+                    console.log('   🔄 Meta 버튼을 짧게 눌러서 컨트롤러를 깨워주세요');
+                }
+                
+                // 4. 계속 검색할지 결정
+                if (controllerFound || attempts >= maxAttempts) {
+                    if (controllerFound) {
+                        console.log('✅ 컨트롤러 사전 활성화 완료!');
+                    } else {
+                        console.log('⚠️ 컨트롤러를 찾지 못했지만 VR 모드를 계속 진행합니다');
+                        console.log('💡 VR 모드에서 컨트롤러가 나타나지 않으면:');
+                        console.log('   1. 헤드셋을 벗고 컨트롤러 전원 확인');
+                        console.log('   2. Meta 버튼 3초 길게 누르기');
+                        console.log('   3. 브라우저 새로고침 후 재시도');
+                    }
+                    resolve();
+                } else {
+                    // 1초 후 재시도
+                    setTimeout(searchControllers, 1000);
+                }
+            };
+            
+            // 검색 시작
+            searchControllers();
+        });
+    }
+
     private async requestMetaQuestPermissions() {
         console.log('🔐 메타 퀘스트3 브라우저 권한 요청 시작...');
         
@@ -946,6 +1031,10 @@ export class SimpleVRGame {
         this.renderer.xr.enabled = true;
         
         try {
+            // VR 시작 전 컨트롤러 사전 활성화
+            console.log('🎮 VR 시작 전 컨트롤러 사전 활성화...');
+            await this.preActivateControllers();
+            
             console.log('🚀 VR 세션 요청 중...');
             
             // 메타 퀘스트3 호환 설정 - requiredFeatures를 제거하고 optionalFeatures만 사용
@@ -1292,11 +1381,60 @@ export class SimpleVRGame {
         
         if (!foundAny) {
             console.log('❌ 긴급검색: 게임패드 없음');
-            console.log('🛠️ 즉시 해결 방법:');
-            console.log('   1. 컨트롤러 Meta 버튼을 눌러서 재활성화');
-            console.log('   2. 컨트롤러를 가볍게 흔들어보기');
-            console.log('   3. A 버튼이나 트리거를 한 번 눌러보기');
+            console.log('🛠️ VR 모드에서 즉시 해결 방법:');
+            console.log('   🥽 헤드셋을 잠시 벗고 컨트롤러 확인');
+            console.log('   🔄 컨트롤러 Meta 버튼 3초 길게 누르기');
+            console.log('   🎮 컨트롤러를 가볍게 흔들어서 깨우기');
+            console.log('   🔴 A 버튼이나 트리거를 연속으로 몇 번 누르기');
+            console.log('   🔃 Quest 헤드셋 재시작 고려');
+            
+            // VR 모드에서 헤드셋 움직임으로 컨트롤러 활성화 시도
+            this.tryHeadsetMotionActivation();
         }
+    }
+
+    private tryHeadsetMotionActivation(): void {
+        console.log('🤸 헤드셋 움직임으로 컨트롤러 활성화 시도...');
+        console.log('💡 헤드셋을 좌우로 가볍게 흔들어보세요!');
+        
+        // 헤드셋 위치 변화 감지
+        const currentPosition = this.camera.position.clone();
+        let lastPosition = currentPosition.clone();
+        let motionAttempts = 0;
+        
+        const checkMotion = () => {
+            motionAttempts++;
+            const newPosition = this.camera.position.clone();
+            const movement = newPosition.distanceTo(lastPosition);
+            
+            if (movement > 0.1) { // 10cm 이상 움직임 감지
+                console.log(`🤸 헤드셋 움직임 감지: ${movement.toFixed(2)}m`);
+                
+                // 움직임으로 게임패드 이벤트 트리거
+                window.dispatchEvent(new Event('gamepadconnected'));
+                
+                // 강제로 게임패드 스캔
+                const gamepads = navigator.getGamepads();
+                for (let i = 0; i < gamepads.length; i++) {
+                    const gp = gamepads[i];
+                    if (gp && gp.connected) {
+                        console.log('✅ 헤드셋 움직임으로 컨트롤러 재발견!');
+                        return;
+                    }
+                }
+            }
+            
+            lastPosition = newPosition;
+            
+            // 10초간 시도
+            if (motionAttempts < 600) { // 60fps * 10초
+                requestAnimationFrame(checkMotion);
+            } else {
+                console.log('⏰ 헤드셋 움직임 활성화 시도 종료');
+            }
+        };
+        
+        requestAnimationFrame(checkMotion);
     }
 
     private tryWebXRInput(session: any): void {
