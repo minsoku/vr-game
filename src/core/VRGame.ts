@@ -174,10 +174,10 @@ export class VRGame {
                 }
             });
 
-            // VR 컨트롤러 초기화
-            this.vrController = new VRController(this);
-
             console.log('✅ VR 설정 완료');
+
+            // VR 컨트롤러 초기화 (XR Helper 생성 후)
+            this.vrController = new VRController(this);
             
         } catch (error) {
             console.error('❌ VR 설정 실패:', error);
@@ -196,8 +196,34 @@ export class VRGame {
                 this.xrHelper.pointerSelection.displaySelectionMesh = true;
             }
 
-            // 핸드 트래킹 활성화
+            // 이동 기능 활성화
             const featureManager = this.xrHelper.baseExperience.featuresManager;
+            try {
+                // 텔레포트 기능
+                const teleportation = featureManager.enableFeature(BABYLON.WebXRFeatureName.TELEPORTATION, "stable", {
+                    xrInput: this.xrHelper.input,
+                    floorMeshes: [],
+                    defaultTargetMeshOptions: {
+                        teleportationFillColor: "#55FF99",
+                        teleportationBorderColor: "#888888"
+                    }
+                });
+                console.log('📍 텔레포트 기능 활성화됨');
+
+                // 스무스 로코모션 (조이스틱 이동)
+                const locomotion = featureManager.enableFeature(BABYLON.WebXRFeatureName.MOVEMENT, "stable", {
+                    xrInput: this.xrHelper.input,
+                    movementEnabled: true,
+                    rotationEnabled: true,
+                    movementSpeed: 4.0,
+                    rotationSpeed: 0.25
+                });
+                console.log('🚶 스무스 로코모션 활성화됨');
+            } catch (error) {
+                console.log('⚠️ 이동 기능 활성화 실패:', error);
+            }
+
+            // 핸드 트래킹 활성화
             try {
                 featureManager.enableFeature(BABYLON.WebXRFeatureName.HAND_TRACKING, "latest", {
                     xrInput: this.xrHelper.input,
@@ -205,6 +231,14 @@ export class VRGame {
                 console.log('✋ 핸드 트래킹 활성화됨');
             } catch (error) {
                 console.log('⚠️ 핸드 트래킹 활성화 실패:', error);
+            }
+
+            // VR 컨트롤러에게 XR Helper가 준비되었음을 알림
+            if (this.vrController) {
+                console.log('🎮 VR 컨트롤러에 XR Helper 업데이트 중...');
+                // VRController의 setupVRFeatures 재호출
+                (this.vrController as any).xrHelper = this.xrHelper;
+                (this.vrController as any).setupVRFeatures();
             }
         }
     }

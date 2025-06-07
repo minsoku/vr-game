@@ -35,58 +35,59 @@ export class VRController {
         this.camera = game.camera;
         this.engine = game.engine;
         
+        // VRGame의 XR Helper를 가져옴
+        this.xrHelper = game.getXRHelper();
+        
         this.initializeVR();
     }
 
     private async initializeVR(): Promise<void> {
         try {
-            console.log('🎮 Babylon.js VR 컨트롤러 설정 중...');
+            console.log('🎮 VR 컨트롤러 설정 중...');
             
-            // XR 경험 생성
-            this.xrHelper = await this.scene.createDefaultXRExperienceAsync({
-                floorMeshes: [], // 바닥 메시가 있다면 여기에 추가
-                disableTeleportation: false, // 텔레포트 활성화
-                optionalFeatures: true
-            });
-
-            // WebXR locomotion 시스템 활성화 (조이스틱 이동)
-            const featureManager = this.xrHelper.baseExperience.featuresManager;
-            try {
-                const locomotion = featureManager.enableFeature(BABYLON.WebXRFeatureName.MOVEMENT, "latest", {
-                    xrInput: this.xrHelper.input,
-                    movementEnabled: true,
-                    rotationEnabled: true
-                });
-                console.log('🚶 WebXR Locomotion 활성화됨');
-            } catch (error) {
-                console.log('⚠️ WebXR Locomotion 활성화 실패, 수동 구현 사용:', error);
+            // XR Helper가 없으면 대기
+            if (!this.xrHelper) {
+                console.log('⏳ XR Helper를 기다리는 중...');
+                // XR Helper가 생성될 때까지 대기
+                setTimeout(() => {
+                    this.xrHelper = this.game.getXRHelper();
+                    if (this.xrHelper) {
+                        this.setupVRFeatures();
+                    }
+                }, 1000);
+                return;
             }
 
-            // 포인터 선택 설정
-            if (this.xrHelper.pointerSelection) {
-                this.xrHelper.pointerSelection.displayLaserPointer = true;
-                this.xrHelper.pointerSelection.displaySelectionMesh = true;
-            }
-
-            // 핸드 트래킹 활성화
-            try {
-                featureManager.enableFeature(BABYLON.WebXRFeatureName.HAND_TRACKING, "latest", {
-                    xrInput: this.xrHelper.input,
-                }, true, false);
-                console.log('🤚 핸드 트래킹 활성화됨');
-            } catch (error) {
-                console.log('⚠️ 핸드 트래킹 활성화 실패 (선택사항):', error);
-            }
-
-            // 컨트롤러 설정
-            this.setupControllers();
-            this.createTeleportMarker();
-            
-            console.log('✅ Babylon.js VR 컨트롤러 설정 완료');
+            this.setupVRFeatures();
             
         } catch (error) {
             console.error('❌ VR 초기화 실패:', error);
         }
+    }
+
+    private setupVRFeatures(): void {
+        if (!this.xrHelper) return;
+
+        console.log('🎮 VR 기능 설정 중...');
+
+        // WebXR locomotion 시스템 활성화 (조이스틱 이동)
+        const featureManager = this.xrHelper.baseExperience.featuresManager;
+        try {
+            const locomotion = featureManager.enableFeature(BABYLON.WebXRFeatureName.MOVEMENT, "latest", {
+                xrInput: this.xrHelper.input,
+                movementEnabled: true,
+                rotationEnabled: true
+            });
+            console.log('🚶 WebXR Locomotion 활성화됨');
+        } catch (error) {
+            console.log('⚠️ WebXR Locomotion 활성화 실패, 수동 구현 사용:', error);
+        }
+
+        // 컨트롤러 설정
+        this.setupControllers();
+        this.createTeleportMarker();
+        
+        console.log('✅ VR 컨트롤러 설정 완료');
     }
 
     private setupControllers(): void {
