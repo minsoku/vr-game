@@ -748,67 +748,196 @@ export class SimpleVRGame {
         }
     }
 
+    private async requestMetaQuestPermissions() {
+        console.log('🔐 메타 퀘스트3 브라우저 권한 요청 시작...');
+        
+        try {
+            // 1. 기본 권한들 요청
+            if ('permissions' in navigator) {
+                const permissions = [
+                    'accelerometer',
+                    'gyroscope', 
+                    'magnetometer'
+                ];
+                
+                for (const perm of permissions) {
+                    try {
+                        const result = await (navigator as any).permissions.query({ name: perm });
+                        console.log(`🔐 ${perm} 권한:`, result.state);
+                    } catch (e) {
+                        console.log(`❌ ${perm} 권한 요청 실패:`, e);
+                    }
+                }
+            }
+            
+            // 2. 디바이스 모션 권한 (iOS/Meta Quest 브라우저)
+            if (typeof (DeviceMotionEvent as any).requestPermission === 'function') {
+                console.log('📱 디바이스 모션 권한 요청...');
+                try {
+                    const permission = await (DeviceMotionEvent as any).requestPermission();
+                    console.log('📱 디바이스 모션 권한:', permission);
+                } catch (e) {
+                    console.log('❌ 디바이스 모션 권한 실패:', e);
+                }
+            }
+            
+            // 3. 강제로 gamepad 이벤트 활성화
+            console.log('🎮 게임패드 이벤트 강제 활성화...');
+            
+            // 사용자 제스처 시뮬레이션으로 게임패드 API 활성화
+            const fakeClick = new PointerEvent('click', {
+                pointerId: 1,
+                bubbles: true,
+                cancelable: true
+            });
+            document.dispatchEvent(fakeClick);
+            
+            // 게임패드 스캔 강제 시작
+            setTimeout(() => {
+                const gamepads = navigator.getGamepads();
+                console.log(`🎮 권한 요청 후 게임패드 스캔: ${gamepads.length}개 슬롯`);
+            }, 100);
+            
+        } catch (error) {
+            console.log('⚠️ 권한 요청 중 일부 실패 (정상적일 수 있음):', error);
+        }
+    }
+
     private async forceControllerActivation(session: XRSession) {
         return new Promise<void>((resolve) => {
-            console.log('💪 컨트롤러 강제 활성화 시작...');
+            console.log('💪 메타 퀘스트3 컨트롤러 강제 활성화 시작...');
             
-            // 컨트롤러 상태 주기적 확인
-            const checkControllers = () => {
-                console.log(`🔍 컨트롤러 상태 확인: ${session.inputSources.length}개 입력 소스`);
+            // 1단계: 세션 정보 상세 확인
+            console.log('📋 XR 세션 상세 정보:');
+            console.log('- 세션 모드:', session.mode);
+            console.log('- 환경 블렌드:', session.environmentBlendMode);
+            console.log('- 지원 참조공간:', session.supportedFrameRates);
+            console.log('- 입력 소스 수:', session.inputSources.length);
+
+            // 2단계: 강제로 컨트롤러 이벤트 트리거
+            const forceControllerDetection = () => {
+                console.log('🔍 강제 컨트롤러 감지 시작...');
                 
-                for (let i = 0; i < session.inputSources.length; i++) {
-                    const source = session.inputSources[i];
-                    console.log(`  📱 입력소스 ${i}:`, {
-                        handedness: source.handedness,
-                        targetRayMode: source.targetRayMode,
-                        hasGamepad: !!source.gamepad,
-                        gamepadId: source.gamepad?.id || 'none',
-                        gamepadConnected: source.gamepad?.connected || false,
-                        axes: source.gamepad?.axes?.length || 0,
-                        buttons: source.gamepad?.buttons?.length || 0
-                    });
-                    
-                    // 컨트롤러 진동으로 활성화 시도
-                    if (source.gamepad?.hapticActuators?.length > 0) {
-                        console.log('🔄 컨트롤러 진동으로 활성화 시도...');
-                        try {
-                            source.gamepad.hapticActuators[0].pulse(0.3, 100);
-                        } catch (e) {
-                            console.log('진동 실패:', e);
+                // gamepadconnected 이벤트 강제 트리거 시도
+                const fakeEvent = new Event('gamepadconnected');
+                window.dispatchEvent(fakeEvent);
+                
+                // 직접 Gamepad API 폴링
+                const gamepads = navigator.getGamepads();
+                console.log(`🎮 브라우저 게임패드 API: ${gamepads.length}개 슬롯`);
+                
+                for (let i = 0; i < gamepads.length; i++) {
+                    const gamepad = gamepads[i];
+                    if (gamepad) {
+                        console.log(`🕹️ 게임패드 ${i} 발견:`, {
+                            id: gamepad.id,
+                            connected: gamepad.connected,
+                            mapping: gamepad.mapping,
+                            axes: gamepad.axes.length,
+                            buttons: gamepad.buttons.length,
+                            timestamp: gamepad.timestamp,
+                            vibrationActuator: !!gamepad.vibrationActuator
+                        });
+
+                        // Meta Quest 컨트롤러인지 확인
+                        if (gamepad.id.toLowerCase().includes('oculus') || 
+                            gamepad.id.toLowerCase().includes('meta') ||
+                            gamepad.id.toLowerCase().includes('quest')) {
+                            console.log('✅ 메타 퀘스트 컨트롤러 확인됨!');
+                            
+                            // 진동으로 활성화 시도
+                            if (gamepad.vibrationActuator) {
+                                gamepad.vibrationActuator.playEffect('dual-rumble', {
+                                    duration: 500,
+                                    strongMagnitude: 1.0,
+                                    weakMagnitude: 0.5
+                                }).then(() => {
+                                    console.log('✅ 컨트롤러 진동 성공');
+                                }).catch(e => {
+                                    console.log('❌ 진동 실패:', e);
+                                });
+                            }
                         }
                     }
                 }
-            };
-
-            // 컨트롤러 이벤트 리스너 추가
-            const handleInputSourcesChange = (event: any) => {
-                console.log('🎮 컨트롤러 상태 변경 이벤트:', event);
-                checkControllers();
-            };
-
-            session.addEventListener('inputsourceschange', handleInputSourcesChange);
-            
-            // 즉시 현재 상태 확인
-            checkControllers();
-            
-            // 메타 퀘스트 컨트롤러 검색 시도
-            setTimeout(() => {
-                console.log('🔍 직접 gamepad API로 메타 퀘스트 컨트롤러 검색...');
-                const gamepads = navigator.getGamepads();
-                for (let i = 0; i < gamepads.length; i++) {
-                    const gp = gamepads[i];
-                    if (gp && gp.connected) {
-                        console.log(`🎮 Gamepad ${i}:`, {
-                            id: gp.id,
-                            connected: gp.connected,
-                            mapping: gp.mapping,
-                            axes: gp.axes.length,
-                            buttons: gp.buttons.length
+                
+                // XR 입력 소스 다시 확인
+                console.log('🔄 XR 입력 소스 재확인...');
+                for (let i = 0; i < session.inputSources.length; i++) {
+                    const source = session.inputSources[i];
+                    console.log(`📱 XR 입력소스 ${i}:`, {
+                        handedness: source.handedness,
+                        targetRayMode: source.targetRayMode,
+                        profiles: source.profiles,
+                        gamepad: !!source.gamepad
+                    });
+                    
+                    if (source.gamepad) {
+                        console.log(`🎮 XR 게임패드 ${i}:`, {
+                            id: source.gamepad.id,
+                            axes: source.gamepad.axes.length,
+                            buttons: source.gamepad.buttons.length,
+                            connected: source.gamepad.connected,
+                            mapping: source.gamepad.mapping
                         });
                     }
                 }
+            };
+
+            // 3단계: 이벤트 리스너 등록
+            const handleInputSourcesChange = (event: any) => {
+                console.log('🎮 입력 소스 변경 감지:', event);
+                forceControllerDetection();
+            };
+
+            const handleGamepadConnected = (event: any) => {
+                console.log('🎮 게임패드 연결 감지:', event);
+                forceControllerDetection();
+            };
+
+            const handleGamepadDisconnected = (event: any) => {
+                console.log('🎮 게임패드 연결 해제:', event);
+            };
+
+            // 이벤트 리스너 등록
+            session.addEventListener('inputsourceschange', handleInputSourcesChange);
+            window.addEventListener('gamepadconnected', handleGamepadConnected);
+            window.addEventListener('gamepaddisconnected', handleGamepadDisconnected);
+
+            // 4단계: 강제 활성화 시퀀스
+            console.log('🔄 컨트롤러 강제 활성화 시퀀스 시작...');
+            
+            // 즉시 첫 번째 검사
+            forceControllerDetection();
+            
+            // 1초 후 재시도
+            setTimeout(() => {
+                console.log('🔄 1초 후 재검사...');
+                forceControllerDetection();
+            }, 1000);
+            
+            // 3초 후 재시도
+            setTimeout(() => {
+                console.log('🔄 3초 후 재검사...');
+                forceControllerDetection();
+                
+                // 최종 상태 보고
+                const finalGamepads = navigator.getGamepads();
+                const connectedCount = Array.from(finalGamepads).filter(gp => gp && gp.connected).length;
+                
+                if (connectedCount > 0) {
+                    console.log(`✅ 컨트롤러 활성화 완료! ${connectedCount}개 연결됨`);
+                } else {
+                    console.log('❌ 컨트롤러 활성화 실패 - 물리적 문제일 가능성');
+                    console.log('📝 해결 방법:');
+                    console.log('1. 메타 퀘스트 헤드셋에서 컨트롤러 전원 확인');
+                    console.log('2. 컨트롤러 Meta 버튼 3초간 길게 누르기');
+                    console.log('3. Quest 설정 > 디바이스 > 컨트롤러 재페어링');
+                    console.log('4. 브라우저 완전 재시작');
+                }
+                
                 resolve();
-            }, 2000);
+            }, 3000);
         });
     }
 
@@ -843,6 +972,10 @@ export class SimpleVRGame {
             console.log('🔄 Three.js WebXR 세션 설정 중...');
             await this.renderer.xr.setSession(session);
             console.log('🥽 VR 모드 활성화 완료');
+            
+            // 메타 퀘스트 브라우저 권한 요청
+            console.log('🔐 메타 퀘스트 브라우저 권한 요청...');
+            await this.requestMetaQuestPermissions();
             
             // 컨트롤러 권한 및 활성화 시도
             console.log('🎮 컨트롤러 강제 활성화 시도...');
@@ -1087,14 +1220,22 @@ export class SimpleVRGame {
             // 60프레임마다 한 번 로그 (1초마다)
             if (this.vrDebugCounter % 60 === 0) {
                 console.log('❌ VR 세션 또는 입력 소스가 없습니다');
+                // 강제로 컨트롤러 재검색 시도
+                this.emergencyControllerSearch();
             }
             this.vrDebugCounter++;
             return;
         }
 
-        // 컨트롤러 개수 확인
+        // 컨트롤러 개수 확인 및 자동 복구
         if (this.vrDebugCounter % 120 === 0) { // 2초마다 한 번
-            console.log(`🎮 활성 컨트롤러 수: ${session.inputSources.length}`);
+            const inputCount = session.inputSources.length;
+            console.log(`🎮 활성 컨트롤러 수: ${inputCount}`);
+            
+            if (inputCount === 0) {
+                console.log('⚠️ 컨트롤러가 없음 - 자동 복구 시도');
+                this.emergencyControllerSearch();
+            }
         }
 
         // 방법 1: WebXR InputSource 사용
@@ -1109,6 +1250,53 @@ export class SimpleVRGame {
         }
         
         this.vrDebugCounter++;
+    }
+
+    private emergencyControllerSearch(): void {
+        console.log('🚨 긴급 컨트롤러 검색 시작...');
+        
+        // 직접 Gamepad API로 강제 검색
+        const gamepads = navigator.getGamepads();
+        let foundAny = false;
+        
+        for (let i = 0; i < gamepads.length; i++) {
+            const gamepad = gamepads[i];
+            if (gamepad && gamepad.connected) {
+                foundAny = true;
+                console.log(`🎮 긴급검색: 게임패드 ${i} 발견`, {
+                    id: gamepad.id,
+                    buttons: gamepad.buttons?.length || 0,
+                    axes: gamepad.axes?.length || 0,
+                    timestamp: gamepad.timestamp
+                });
+                
+                // 버튼 상태 확인
+                if (gamepad.buttons) {
+                    for (let b = 0; b < Math.min(gamepad.buttons.length, 4); b++) {
+                        if (gamepad.buttons[b].pressed) {
+                            console.log(`🔴 긴급검색: 버튼 ${b} 활성화됨!`);
+                        }
+                    }
+                }
+                
+                // 조이스틱 상태 확인  
+                if (gamepad.axes && gamepad.axes.length >= 2) {
+                    const leftX = gamepad.axes[0];
+                    const leftY = gamepad.axes[1];
+                    if (Math.abs(leftX) > 0.1 || Math.abs(leftY) > 0.1) {
+                        console.log(`🕹️ 긴급검색: 조이스틱 움직임 감지! X:${leftX.toFixed(2)}, Y:${leftY.toFixed(2)}`);
+                    }
+                }
+            }
+        }
+        
+        if (!foundAny) {
+            console.log('❌ 긴급검색: 게임패드 없음');
+            console.log('🛠️ 즉시 해결 방법:');
+            console.log('   1. 컨트롤러 Meta 버튼을 눌러서 재활성화');
+            console.log('   2. 컨트롤러를 가볍게 흔들어보기');
+            console.log('   3. A 버튼이나 트리거를 한 번 눌러보기');
+        }
     }
 
     private tryWebXRInput(session: any): void {
