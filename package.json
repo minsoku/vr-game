@@ -5,12 +5,10 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "vite",
-    "dev:https": "vite --config vite.https.config.ts",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext .ts,.tsx",
-    "type-check": "tsc --noEmit",
-    "cert": "mkcert localhost"
+    "type-check": "tsc --noEmit"
   },
   "keywords": [
     "webxr",
@@ -22,14 +20,16 @@
   "author": "Quest Escape VR Team",
   "license": "MIT",
   "dependencies": {
-    "three": "^0.158.0",
-    "@types/three": "^0.158.3"
+    "three": "^0.158.0"
   },
   "devDependencies": {
-    "typescript": "^5.2.2",
-    "vite": "^5.0.0",
+    "@types/three": "^0.158.3",
+    "@types/webxr": "^0.5.4",
+    "@types/node": "^22.15.30",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
-    "eslint": "^8.45.0"
+    "eslint": "^8.45.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0"
   }
 }

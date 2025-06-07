@@ -1,11 +1,5 @@
 import type { VRGame } from './VRGame';
-
-export interface InventoryItem {
-    id: string;
-    type: string;
-    name: string;
-    object?: any;
-}
+import type { InventoryItem } from './types';
 
 export class GameStateManager {
     private game: VRGame;

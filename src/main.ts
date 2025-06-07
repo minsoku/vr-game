@@ -1,8 +1,8 @@
-import { VRGame } from './core/VRGame';
+import { SimpleVRGame } from './core/SimpleVRGame';
 import { LoadingManager } from './utils/LoadingManager';
 
 class QuestEscapeVR {
-    private game: VRGame | null = null;
+    private game: SimpleVRGame | null = null;
     private loadingManager: LoadingManager;
 
     constructor() {
@@ -15,14 +15,8 @@ class QuestEscapeVR {
             // 로딩 시작
             this.loadingManager.show('게임 초기화 중...');
 
-            // WebXR 지원 확인
-            if (!('xr' in navigator)) {
-                throw new Error('WebXR을 지원하지 않는 브라우저입니다.');
-            }
-
-            // VR 게임 인스턴스 생성
-            this.game = new VRGame();
-            await this.game.init();
+            // VR 게임 인스턴스 생성 (WebXR 지원 확인은 나중에)
+            this.game = new SimpleVRGame();
 
             // 로딩 완료
             this.loadingManager.hide();
@@ -31,6 +25,7 @@ class QuestEscapeVR {
             this.setupUI();
 
             console.log('🎮 Quest Escape VR이 성공적으로 초기화되었습니다!');
+            console.log('💡 마우스를 클릭하여 포인터 락을 활성화하세요.');
         } catch (error) {
             console.error('게임 초기화 실패:', error);
             this.showError(error as Error);
@@ -84,20 +79,24 @@ class QuestEscapeVR {
 
     private showControls(): void {
         console.log(`
-🎮 조작 방법:
+🎮 Quest Escape VR - 조작 방법:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-VR 모드:
-• 컨트롤러로 오브젝트 가리키기 및 트리거로 선택
-• 그립 버튼으로 오브젝트 집기/놓기
-• 조이스틱으로 이동 (텔레포트 모드)
+🖱️ 마우스 모드:
+• 마우스 이동: 오브젝트 하이라이트
+• 클릭: FPS 모드 활성화 또는 오브젝트 상호작용
+• H: 힌트 보기
 
-2D 모드:
+🎯 FPS 모드 (포인터 락):
 • WASD: 이동
 • 마우스: 시점 회전
-• 클릭: 오브젝트 상호작용
-• E: 아이템 줍기/사용
-• TAB: 인벤토리 열기
-• H: 힌트 보기
+• 클릭: 중앙 크로스헤어로 상호작용
+• P: 비밀번호 입력
+• ESC: FPS 모드 해제
+
+🎲 게임 목표:
+• 황금 큐브 수집 (+100점)
+• 터미널에서 비밀번호 입력 (+200점)
+• 총 300점으로 게임 완료!
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         `);
     }

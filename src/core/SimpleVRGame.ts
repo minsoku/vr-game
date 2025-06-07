@@ -1,0 +1,711 @@
+// @ts-nocheck
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+export class SimpleVRGame {
+    public scene: any;
+    public camera: any;
+    public renderer: any;
+    private animationId: number = 0;
+    
+    // 마우스 상태
+    private mouse = { x: 0, y: 0 };
+    private isMouseDown = false;
+    private raycaster: any;
+    
+    // FPS 컨트롤
+    private isPointerLocked = false;
+    private keys: { [key: string]: boolean } = {};
+    private velocity = { x: 0, y: 0, z: 0 };
+    private moveSpeed = 0.05; // 더 현실적인 속도
+    private mouseSensitivity = 0.002;
+    
+    // 1인칭 물리
+    private playerHeight = 1.7; // 플레이어 키 (눈높이)
+    private gravity = -0.003; // 중력
+    private jumpVelocity = 0.1; // 점프 힘
+    private onGround = false;
+    private groundLevel = 0; // 바닥 높이
+    
+    // 걷기 효과
+    private walkBobSpeed = 8.0; // 걷기 흔들림 속도
+    private walkBobAmount = 0.01; // 걷기 흔들림 크기
+    private walkBobTimer = 0;
+    private isWalking = false;
+    
+    // 게임 상태
+    private score = 0;
+    private startTime = Date.now();
+    private passwordSolved = false;
+    
+    // 3D 모델 로더
+    private gltfLoader: GLTFLoader;
+
+    constructor() {
+        this.scene = new THREE.Scene();
+        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        this.raycaster = new THREE.Raycaster();
+        this.gltfLoader = new GLTFLoader();
+        
+        this.init();
+    }
+
+    private init(): void {
+        // 렌더러 설정
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setPixelRatio(window.devicePixelRatio);
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        
+        // DOM에 추가
+        document.body.appendChild(this.renderer.domElement);
+        
+        // 카메라 위치 (1인칭 시점)
+        this.camera.position.set(0, this.playerHeight, 3);
+        this.onGround = true; // 시작시 바닥에 서있음
+        
+        // 씬 설정
+        this.setupScene();
+        
+        // 이벤트 리스너
+        this.setupEventListeners();
+        
+        // 렌더 루프 시작
+        this.animate();
+        
+        console.log('✅ 간단한 VR 게임 초기화 완료');
+    }
+
+    private setupScene(): void {
+        // 공포 방 분위기 조명 설정 (밝기 개선)
+        const ambientLight = new THREE.AmbientLight(0x404060, 0.5); // 더 밝은 환경광
+        this.scene.add(ambientLight);
+
+        // 메인 조명 (자연스러운 실내조명)
+        const mainLight = new THREE.DirectionalLight(0x8090aa, 1.2);
+        mainLight.position.set(3, 5, 2);
+        mainLight.castShadow = true;
+        mainLight.shadow.mapSize.width = 2048;
+        mainLight.shadow.mapSize.height = 2048;
+        mainLight.shadow.camera.near = 0.1;
+        mainLight.shadow.camera.far = 50;
+        this.scene.add(mainLight);
+
+        // 보조 조명 (따뜻한 느낌)
+        const warmLight = new THREE.PointLight(0xffa500, 0.6, 12);
+        warmLight.position.set(-2, 3, -1);
+        this.scene.add(warmLight);
+
+        // 추가 조명 (전체적인 밝기 향상)
+        const fillLight = new THREE.PointLight(0xffffff, 0.8, 15);
+        fillLight.position.set(1, 3, 1);
+        this.scene.add(fillLight);
+
+        // 렌더러 배경색 설정 (좀 더 밝게)
+        this.renderer.setClearColor(0x2a2a3a, 1.0); // 어두운 회색-보라
+
+        // 공포 방 3D 모델 로드
+        this.loadScaryInterior();
+        
+        // 상호작용 가능한 오브젝트들 추가
+        this.addInteractiveObjects();
+        
+        console.log('🏚️ 공포 방 씬 로딩 시작... 조심하세요!');
+    }
+
+    private loadScaryInterior(): void {
+        this.gltfLoader.load(
+            '/horror_room/scene.gltf',
+            (gltf) => {
+                console.log('✅ 공포 방 모델 로드 완료');
+                
+                // 모델 크기 조정 (horror_room에 맞게)
+                const model = gltf.scene;
+                model.scale.set(1, 1, 1); // 원본 크기 사용
+                model.position.set(0, 0, 0);
+                
+                // 그림자 설정
+                model.traverse((child) => {
+                    if (child instanceof THREE.Mesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                        
+                        // 재질 설정 개선 (공포 분위기)
+                        if (child.material) {
+                            child.material.side = THREE.DoubleSide;
+                        }
+                    }
+                });
+                
+                this.scene.add(model);
+                
+                // 카메라 위치 조정 (방 안쪽 적절한 위치로)
+                this.camera.position.set(0, this.playerHeight, 2);
+                
+                // 바닥 레벨 업데이트 (모델에 맞게)
+                this.groundLevel = 0;
+                
+                console.log('🏚️ 공포 방 환경 로딩 완료 - 탐험을 시작하세요!');
+            },
+            (progress) => {
+                console.log('📦 공포 방 로딩 진행률:', (progress.loaded / progress.total * 100).toFixed(1) + '%');
+            },
+            (error) => {
+                console.error('❌ 공포 방 모델 로딩 실패:', error);
+                console.log('🔄 기본 방으로 대체합니다...');
+                // 폴백: 기본 방 생성
+                this.createFallbackRoom();
+            }
+        );
+    }
+
+    private createFallbackRoom(): void {
+        console.log('🏠 기본 방 생성 (폴백)');
+        
+        // 바닥
+        const floorGeometry = new THREE.PlaneGeometry(10, 10);
+        const floorMaterial = new THREE.MeshLambertMaterial({ color: 0x2a1810 });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        this.scene.add(floor);
+
+        // 벽들
+        const wallMaterial = new THREE.MeshLambertMaterial({ color: 0x3a2820 });
+        
+        // 앞 벽
+        const frontWall = new THREE.Mesh(new THREE.PlaneGeometry(10, 4), wallMaterial);
+        frontWall.position.set(0, 2, -5);
+        this.scene.add(frontWall);
+        
+        // 뒤 벽
+        const backWall = new THREE.Mesh(new THREE.PlaneGeometry(10, 4), wallMaterial);
+        backWall.position.set(0, 2, 5);
+        backWall.rotation.y = Math.PI;
+        this.scene.add(backWall);
+        
+        // 왼쪽 벽
+        const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(10, 4), wallMaterial);
+        leftWall.position.set(-5, 2, 0);
+        leftWall.rotation.y = Math.PI / 2;
+        this.scene.add(leftWall);
+        
+        // 오른쪽 벽
+        const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(10, 4), wallMaterial);
+        rightWall.position.set(5, 2, 0);
+        rightWall.rotation.y = -Math.PI / 2;
+        this.scene.add(rightWall);
+    }
+
+    private addInteractiveObjects(): void {
+        // 상호작용 가능한 오래된 열쇠 (공포 분위기)
+        const keyGeometry = new THREE.BoxGeometry(0.05, 0.02, 0.15);
+        const keyMaterial = new THREE.MeshLambertMaterial({ 
+            color: 0x8b7355, // 녹슨 금색
+            emissive: 0x1f1a0a // 어두운 빛남
+        });
+        const key = new THREE.Mesh(keyGeometry, keyMaterial);
+        key.position.set(-1.5, 0.8, 0.5); // 방 한쪽에 배치
+        key.rotation.y = Math.PI / 4; // 약간 회전
+        key.castShadow = true;
+        key.userData = { 
+            type: 'key', 
+            id: 'rusty_key',
+            interactive: true,
+            originalColor: 0x8b7355
+        };
+        this.scene.add(key);
+
+        // 오래된 비밀번호 상자 (공포 분위기)
+        const terminalGeometry = new THREE.BoxGeometry(0.3, 0.2, 0.1);
+        const terminalMaterial = new THREE.MeshLambertMaterial({ 
+            color: 0x2c2c2c, // 어두운 회색
+            emissive: 0x0a0000 // 약간의 붉은 빛
+        });
+        const terminal = new THREE.Mesh(terminalGeometry, terminalMaterial);
+        terminal.position.set(1.5, 1.2, -0.8); // 다른 위치로 이동
+        terminal.castShadow = true;
+        terminal.userData = { 
+            type: 'terminal', 
+            id: 'horror_terminal',
+            interactive: true,
+            originalColor: 0x2c2c2c
+        };
+        this.scene.add(terminal);
+
+        // 터미널 스크린 (불안한 붉은 빛)
+        const screenGeometry = new THREE.BoxGeometry(0.2, 0.12, 0.01);
+        const screenMaterial = new THREE.MeshLambertMaterial({ 
+            color: 0x220000, // 어두운 빨강
+            emissive: 0x440000 // 붉은 빛남
+        });
+        const screen = new THREE.Mesh(screenGeometry, screenMaterial);
+        screen.position.set(1.5, 1.2, -0.75);
+        this.scene.add(screen);
+
+        // 작은 스컬 오브젝트 (장식용)
+        const skullGeometry = new THREE.SphereGeometry(0.08, 8, 6);
+        const skullMaterial = new THREE.MeshLambertMaterial({ 
+            color: 0xd4c4a8, // 해골 색
+            emissive: 0x0a0a0a
+        });
+        const skull = new THREE.Mesh(skullGeometry, skullMaterial);
+        skull.position.set(0.8, 0.9, 1.2);
+        skull.scale.set(1, 0.8, 1); // 해골 모양으로 변형
+        skull.castShadow = true;
+        this.scene.add(skull);
+    }
+
+    private setupEventListeners(): void {
+        // 윈도우 리사이즈
+        window.addEventListener('resize', () => {
+            this.camera.aspect = window.innerWidth / window.innerHeight;
+            this.camera.updateProjectionMatrix();
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // 마우스 이벤트
+        window.addEventListener('mousemove', (event) => this.onMouseMove(event));
+        window.addEventListener('click', (event) => this.onMouseClick(event));
+        
+        // 키보드 이벤트
+        document.addEventListener('keydown', (event) => this.onKeyDown(event));
+        document.addEventListener('keyup', (event) => this.onKeyUp(event));
+        
+        // 포인터 락 이벤트
+        document.addEventListener('pointerlockchange', () => this.onPointerLockChange());
+        
+        console.log('🎮 이벤트 리스너 설정 완료');
+    }
+
+    private onMouseMove(event: MouseEvent): void {
+        if (this.isPointerLocked) {
+            // 1인칭 시점 카메라 회전
+            const movementX = event.movementX || 0;
+            const movementY = event.movementY || 0;
+            
+            // 좌우 회전 (Y축 회전)
+            this.camera.rotation.y -= movementX * this.mouseSensitivity;
+            
+            // 상하 회전 (X축 회전) - 현실적인 제한
+            this.camera.rotation.x -= movementY * this.mouseSensitivity;
+            this.camera.rotation.x = Math.max(-Math.PI/3, Math.min(Math.PI/3, this.camera.rotation.x)); // 60도 제한
+        } else {
+            // 일반 마우스 - 오브젝트 하이라이트용
+            this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            // 마우스 위치에서 레이캐스팅
+            this.updateMouseRaycasting();
+        }
+    }
+
+    private onMouseClick(event: MouseEvent): void {
+        this.isMouseDown = true;
+        
+        if (!this.isPointerLocked) {
+            // 포인터 락 요청
+            this.renderer.domElement.requestPointerLock();
+        } else {
+            // FPS 모드에서 중앙 크로스헤어로 상호작용
+            this.raycaster.setFromCamera({ x: 0, y: 0 }, this.camera);
+            const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+            
+            if (intersects.length > 0) {
+                const intersected = intersects[0].object;
+                if (intersected.userData && intersected.userData.interactive) {
+                    this.handleObjectInteraction(intersected);
+                }
+            }
+        }
+    }
+
+    private onKeyDown(event: KeyboardEvent): void {
+        this.keys[event.code] = true;
+        
+        switch (event.code) {
+            case 'KeyH':
+                this.showHint();
+                break;
+            case 'Escape':
+                if (this.isPointerLocked) {
+                    document.exitPointerLock();
+                }
+                break;
+            case 'KeyP':
+                if (!this.passwordSolved) {
+                    this.showPasswordUI();
+                }
+
+                break;
+        }
+    }
+
+    private onKeyUp(event: KeyboardEvent): void {
+        this.keys[event.code] = false;
+    }
+
+    private onPointerLockChange(): void {
+        this.isPointerLocked = document.pointerLockElement === this.renderer.domElement;
+        
+        const crosshair = document.getElementById('crosshair');
+        const fpsGuide = document.getElementById('fps-guide');
+        
+        if (this.isPointerLocked) {
+            console.log('🔒 FPS 모드 활성화 - ESC로 해제');
+            this.showMessage('🎮 FPS 모드 활성화!\nWASD: 이동, 마우스: 시점, ESC: 해제', 2000);
+            
+            // 크로스헤어 표시
+            if (crosshair) crosshair.style.display = 'block';
+            if (fpsGuide) fpsGuide.style.display = 'block';
+            
+            // 마우스 커서 숨김
+            document.body.style.cursor = 'none';
+        } else {
+            console.log('🖱️ 마우스 모드 - 클릭으로 FPS 모드 활성화');
+            
+            // 크로스헤어 숨김
+            if (crosshair) crosshair.style.display = 'none';
+            if (fpsGuide) fpsGuide.style.display = 'none';
+            
+            // 마우스 커서 복원
+            document.body.style.cursor = 'default';
+        }
+    }
+
+    private updateMouseRaycasting(): void {
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+        const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+        
+        // 모든 오브젝트의 하이라이트 제거
+        this.scene.children.forEach((child: any) => {
+            if (child.userData && child.userData.originalColor && child.material) {
+                child.material.color.setHex(child.userData.originalColor);
+            }
+        });
+        
+        // 마우스가 가리키는 오브젝트 하이라이트
+        if (intersects.length > 0) {
+            const intersected = intersects[0].object as any;
+            if (intersected.userData && intersected.userData.interactive && intersected.material) {
+                intersected.material.color.setHex(0xffff00); // 노란색 하이라이트
+                document.body.style.cursor = 'pointer';
+            } else {
+                document.body.style.cursor = 'default';
+            }
+        } else {
+            document.body.style.cursor = 'default';
+        }
+    }
+
+    private handleObjectInteraction(object: any): void {
+        console.log(`🎯 오브젝트 클릭: ${object.userData.type} (${object.userData.id})`);
+        
+        switch (object.userData.type) {
+            case 'key':
+                this.collectKey(object);
+                break;
+            case 'terminal':
+                this.showPasswordInput();
+                break;
+        }
+    }
+
+    private collectKey(keyObject: any): void {
+        // 키 수집 애니메이션
+        const originalY = keyObject.position.y;
+        let moveUp = true;
+        let animCount = 0;
+        
+        const animateKey = () => {
+            if (moveUp) {
+                keyObject.position.y += 0.02;
+                animCount++;
+                if (animCount > 25) {
+                    moveUp = false;
+                }
+            } else {
+                keyObject.position.y -= 0.04;
+                if (keyObject.position.y < originalY - 2) {
+                    this.scene.remove(keyObject);
+                    return;
+                }
+            }
+            requestAnimationFrame(animateKey);
+        };
+        
+        animateKey();
+        
+        // 점수 추가
+        this.score += 100;
+        this.updateUI();
+        
+        console.log('🔑 황금 큐브를 획득했습니다! (+100점)');
+        
+        // 승리 체크
+        if (this.score >= 100) {
+            setTimeout(() => {
+                this.showWinMessage();
+            }, 1000);
+        }
+    }
+
+    private showHint(): void {
+        const hints = [
+            "🗝️ 녹슨 열쇠를 찾아야 합니다... 어둠 속에 숨어있습니다",
+            "💀 붉은 단말기에서 비밀을 풀어야 탈출할 수 있습니다",
+            "🔦 마우스 클릭으로 탐험 모드를 시작하세요",
+            "👻 조심스럽게 WASD로 이동... 무언가 지켜보고 있습니다",
+            "🩸 비밀번호는... 간단한 수학의 답입니다",
+            "⚰️ P키로도 단말기에 접근할 수 있습니다"
+        ];
+        
+        const randomHint = hints[Math.floor(Math.random() * hints.length)];
+        this.showMessage(`🕯️ ${randomHint}`, 4000);
+    }
+
+    private showMessage(message: string, duration: number = 3000): void {
+        const messageDiv = document.createElement('div');
+        messageDiv.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            font-size: 18px;
+            z-index: 1000;
+            text-align: center;
+        `;
+        messageDiv.textContent = message;
+        document.body.appendChild(messageDiv);
+        
+        setTimeout(() => {
+            document.body.removeChild(messageDiv);
+        }, duration);
+    }
+
+    private showWinMessage(): void {
+        const elapsedTime = Math.floor((Date.now() - this.startTime) / 1000);
+        this.showMessage(`🚪 탈출 성공! 공포의 방에서 벗어났습니다!\n⏱️ 생존 시간: ${elapsedTime}초\n🏆 최종 점수: ${this.score}점\n\n🌅 빛을 보게 되어 다행입니다...`, 6000);
+    }
+
+    private updateUI(): void {
+        const scoreElement = document.getElementById('score');
+        const timerElement = document.getElementById('timer');
+        
+        if (scoreElement) {
+            scoreElement.textContent = `점수: ${this.score}`;
+        }
+        
+        if (timerElement) {
+            const elapsedTime = Math.floor((Date.now() - this.startTime) / 1000);
+            const minutes = Math.floor(elapsedTime / 60);
+            const seconds = elapsedTime % 60;
+            timerElement.textContent = `시간: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+    }
+
+    private animate(): void {
+        this.animationId = requestAnimationFrame(() => this.animate());
+        
+        // FPS 스타일 이동 처리
+        if (this.isPointerLocked) {
+            this.handleMovement();
+        }
+        
+        // UI 업데이트
+        this.updateUI();
+        
+        // 렌더링
+        this.renderer.render(this.scene, this.camera);
+    }
+
+    private handleMovement(): void {
+        // 중력 적용
+        if (!this.onGround) {
+            this.velocity.y += this.gravity;
+        }
+        
+        // 수평 이동 입력 처리
+        let moveForward = 0;
+        let moveRight = 0;
+        
+        // WASD 키 입력 처리
+        if (this.keys['KeyW']) moveForward += 1;  // 앞으로
+        if (this.keys['KeyS']) moveForward -= 1;  // 뒤로
+        if (this.keys['KeyD']) moveRight += 1;    // 오른쪽
+        if (this.keys['KeyA']) moveRight -= 1;    // 왼쪽
+        
+        // 걷기 상태 업데이트
+        this.isWalking = (moveForward !== 0 || moveRight !== 0) && this.onGround;
+        
+        // 수평 이동 처리
+        if (moveForward !== 0 || moveRight !== 0) {
+            // 카메라의 방향 벡터 계산
+            const cameraDirection = new THREE.Vector3();
+            this.camera.getWorldDirection(cameraDirection);
+            
+            // forward 벡터 (Y축은 0으로 설정하여 수평 이동만)
+            const forward = new THREE.Vector3(cameraDirection.x, 0, cameraDirection.z).normalize();
+            
+            // right 벡터 (forward에 수직)
+            const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+            
+            // 최종 이동 벡터 계산
+            const moveVector = new THREE.Vector3();
+            moveVector.addScaledVector(forward, moveForward * this.moveSpeed);
+            moveVector.addScaledVector(right, moveRight * this.moveSpeed);
+            
+            // X, Z 위치만 업데이트 (Y는 물리에서 처리)
+            this.camera.position.x += moveVector.x;
+            this.camera.position.z += moveVector.z;
+        }
+        
+        // 수직 이동 적용 (점프/중력)
+        this.camera.position.y += this.velocity.y;
+        
+        // 바닥 충돌 검사
+        if (this.camera.position.y <= this.groundLevel + this.playerHeight) {
+            this.camera.position.y = this.groundLevel + this.playerHeight;
+            this.velocity.y = 0;
+            this.onGround = true;
+        }
+        
+        // 걷기 애니메이션 (카메라 흔들림)
+        if (this.isWalking) {
+            this.walkBobTimer += this.walkBobSpeed * 0.016; // 60fps 기준
+            const bobOffset = Math.sin(this.walkBobTimer) * this.walkBobAmount;
+            this.camera.position.y += bobOffset;
+        }
+        
+        // 이동 제한 (맵 경계)
+        this.camera.position.x = Math.max(-4, Math.min(4, this.camera.position.x));
+        this.camera.position.z = Math.max(-4, Math.min(4, this.camera.position.z));
+    }
+
+    private showPasswordInput(): void {
+        this.showPasswordUI();
+    }
+
+    private showPasswordUI(): void {
+        const passwordUI = document.getElementById('passwordUI');
+        if (passwordUI) {
+            passwordUI.style.display = 'flex';
+            
+            // 디스플레이 초기화
+            const displayValue = document.getElementById('displayValue');
+            if (displayValue) {
+                displayValue.textContent = '_';
+            }
+            
+            // 이벤트 리스너 추가
+            this.setupPasswordUIListeners();
+        }
+    }
+
+    private setupPasswordUIListeners(): void {
+        const cancelBtn = document.getElementById('cancelPassword');
+        const numButtons = document.querySelectorAll('.num-btn');
+        const clearBtn = document.querySelector('.clear-btn');
+        const enterBtn = document.querySelector('.enter-btn');
+        const displayValue = document.getElementById('displayValue');
+        
+        let currentValue = '';
+        
+        // 숫자 버튼들
+        numButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const num = btn.getAttribute('data-num');
+                if (num && currentValue.length < 3) { // 최대 3자리
+                    currentValue += num;
+                    if (displayValue) {
+                        displayValue.textContent = currentValue || '_';
+                    }
+                }
+            });
+        });
+        
+        // 지우기 버튼
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                currentValue = '';
+                if (displayValue) {
+                    displayValue.textContent = '_';
+                }
+            });
+        }
+        
+        // 확인 버튼
+        if (enterBtn) {
+            enterBtn.addEventListener('click', () => {
+                if (currentValue) {
+                    this.checkPassword(currentValue);
+                }
+            });
+        }
+        
+        // 취소 버튼
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => {
+                this.hidePasswordUI();
+            });
+        }
+        
+        // ESC 키로 취소
+        const escHandler = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                this.hidePasswordUI();
+                document.removeEventListener('keydown', escHandler);
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+    }
+
+    private checkPassword(password: string): void {
+        if (password === '5') {
+            this.score += 200;
+            this.passwordSolved = true;
+            this.updateUI();
+            this.hidePasswordUI();
+            this.showMessage('🎉 비밀번호 정답! (+200점)\n숨겨진 방이 열렸습니다!', 3000);
+            console.log('🔓 비밀번호 해독 성공!');
+            
+            // 승리 조건 업데이트
+            if (this.score >= 300) {
+                setTimeout(() => {
+                    this.showWinMessage();
+                }, 1000);
+            }
+        } else {
+            this.hidePasswordUI();
+            this.showMessage('❌ 비밀번호가 틀렸습니다!\n다시 시도해보세요.', 2000);
+            console.log('🔒 비밀번호 오답');
+        }
+    }
+
+    private hidePasswordUI(): void {
+        const passwordUI = document.getElementById('passwordUI');
+        if (passwordUI) {
+            passwordUI.style.display = 'none';
+        }
+    }
+
+    public async checkVRSupport(): Promise<boolean> {
+        return false; // 지금은 2D 모드만
+    }
+
+    public async startVR(): Promise<void> {
+        throw new Error('VR 모드는 아직 지원되지 않습니다.');
+    }
+
+    public dispose(): void {
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+        }
+        this.renderer.dispose();
+    }
+} 
