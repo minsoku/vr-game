@@ -1,0 +1,35 @@
+{
+  "name": "quest-escape-vr",
+  "version": "1.0.0",
+  "description": "웹 VR 방탈출 게임 - 메타퀘스트 3 기반",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "vite",
+    "dev:https": "vite --config vite.https.config.ts",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .ts,.tsx",
+    "type-check": "tsc --noEmit",
+    "cert": "mkcert localhost"
+  },
+  "keywords": [
+    "webxr",
+    "vr",
+    "escape-room",
+    "three.js",
+    "meta-quest"
+  ],
+  "author": "Quest Escape VR Team",
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.158.0",
+    "@types/three": "^0.158.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.45.0"
+  }
+}
