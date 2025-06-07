@@ -1,27 +1,14 @@
 // @ts-nocheck
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import * as BABYLON from '@babylonjs/core';
 import type { VRGame } from './VRGame';
 
 export class SceneManager {
     private game: VRGame;
-    private gltfLoader: GLTFLoader;
     private currentRoom: string | null = null;
-    private vrUI: THREE.Group | null = null;
+    private vrUI: BABYLON.Mesh[] = [];
 
     constructor(game: VRGame) {
         this.game = game;
-        this.setupLoaders();
-    }
-
-    private setupLoaders(): void {
-        // DRACO 압축 지원
-        const dracoLoader = new DRACOLoader();
-        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
-        
-        this.gltfLoader = new GLTFLoader();
-        this.gltfLoader.setDRACOLoader(dracoLoader);
     }
 
     public async loadRoom(roomType: string): Promise<void> {
@@ -53,15 +40,15 @@ export class SceneManager {
 
     private async loadLibraryRoom(): Promise<void> {
         // 바닥
-        const floorGeometry = new THREE.PlaneGeometry(10, 10);
-        const floorMaterial = new THREE.MeshLambertMaterial({ 
-            color: 0x8b4513,
-            side: THREE.DoubleSide 
-        });
-        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-        floor.rotation.x = -Math.PI / 2;
-        floor.receiveShadow = true;
-        this.game.scene.add(floor);
+        const floor = BABYLON.MeshBuilder.CreateGround("floor", {
+            width: 10,
+            height: 10
+        }, this.game.scene);
+        
+        const floorMaterial = new BABYLON.StandardMaterial("floorMaterial", this.game.scene);
+        floorMaterial.diffuseColor = new BABYLON.Color3(0.545, 0.271, 0.075); // 갈색
+        floor.material = floorMaterial;
+        floor.receiveShadows = true;
 
         // 벽들
         this.createWalls();
@@ -80,117 +67,137 @@ export class SceneManager {
     }
 
     private createWalls(): void {
-        const wallMaterial = new THREE.MeshLambertMaterial({ color: 0xf5deb3 });
+        const wallMaterial = new BABYLON.StandardMaterial("wallMaterial", this.game.scene);
+        wallMaterial.diffuseColor = new BABYLON.Color3(0.961, 0.871, 0.702); // 베이지색
         
         // 뒷벽
-        const backWall = new THREE.Mesh(
-            new THREE.PlaneGeometry(10, 5),
-            wallMaterial
-        );
-        backWall.position.set(0, 2.5, -5);
-        this.game.scene.add(backWall);
+        const backWall = BABYLON.MeshBuilder.CreatePlane("backWall", {
+            width: 10,
+            height: 5
+        }, this.game.scene);
+        backWall.position = new BABYLON.Vector3(0, 2.5, -5);
+        backWall.material = wallMaterial;
 
         // 좌벽
-        const leftWall = new THREE.Mesh(
-            new THREE.PlaneGeometry(10, 5),
-            wallMaterial
-        );
-        leftWall.position.set(-5, 2.5, 0);
+        const leftWall = BABYLON.MeshBuilder.CreatePlane("leftWall", {
+            width: 10,
+            height: 5
+        }, this.game.scene);
+        leftWall.position = new BABYLON.Vector3(-5, 2.5, 0);
         leftWall.rotation.y = Math.PI / 2;
-        this.game.scene.add(leftWall);
+        leftWall.material = wallMaterial;
 
         // 우벽
-        const rightWall = new THREE.Mesh(
-            new THREE.PlaneGeometry(10, 5),
-            wallMaterial
-        );
-        rightWall.position.set(5, 2.5, 0);
+        const rightWall = BABYLON.MeshBuilder.CreatePlane("rightWall", {
+            width: 10,
+            height: 5
+        }, this.game.scene);
+        rightWall.position = new BABYLON.Vector3(5, 2.5, 0);
         rightWall.rotation.y = -Math.PI / 2;
-        this.game.scene.add(rightWall);
+        rightWall.material = wallMaterial;
     }
 
     private async createBookshelves(): Promise<void> {
+        const shelfMaterial = new BABYLON.StandardMaterial("shelfMaterial", this.game.scene);
+        shelfMaterial.diffuseColor = new BABYLON.Color3(0.545, 0.271, 0.075); // 갈색
+
         // 간단한 책장 생성
         for (let i = 0; i < 3; i++) {
-            const bookshelf = new THREE.Group();
-
             // 책장 프레임
-            const shelfGeometry = new THREE.BoxGeometry(2, 3, 0.3);
-            const shelfMaterial = new THREE.MeshLambertMaterial({ color: 0x8b4513 });
-            const shelf = new THREE.Mesh(shelfGeometry, shelfMaterial);
-            shelf.castShadow = true;
-            bookshelf.add(shelf);
+            const shelf = BABYLON.MeshBuilder.CreateBox("bookshelf", {
+                width: 2,
+                height: 3,
+                depth: 0.3
+            }, this.game.scene);
+            shelf.position = new BABYLON.Vector3(-3 + i * 3, 1.5, -4.5);
+            shelf.material = shelfMaterial;
 
             // 책들 추가
             for (let j = 0; j < 5; j++) {
-                const bookGeometry = new THREE.BoxGeometry(0.1, 0.3, 0.15);
-                const bookMaterial = new THREE.MeshLambertMaterial({ 
-                    color: new THREE.Color().setHSL(Math.random(), 0.7, 0.5) 
-                });
-                const book = new THREE.Mesh(bookGeometry, bookMaterial);
-                book.position.set(
-                    -0.8 + (j * 0.4), 
-                    -1 + Math.random() * 2, 
-                    0.1
-                );
-                book.castShadow = true;
-                bookshelf.add(book);
-            }
+                const book = BABYLON.MeshBuilder.CreateBox("book", {
+                    width: 0.1,
+                    height: 0.3,
+                    depth: 0.15
+                }, this.game.scene);
 
-            bookshelf.position.set(-3 + i * 3, 1.5, -4.5);
-            this.game.scene.add(bookshelf);
+                const bookMaterial = new BABYLON.StandardMaterial(`bookMaterial_${i}_${j}`, this.game.scene);
+                bookMaterial.diffuseColor = new BABYLON.Color3(Math.random(), Math.random(), Math.random());
+                book.material = bookMaterial;
+
+                book.position = new BABYLON.Vector3(
+                    -3 + i * 3 + (-0.8 + j * 0.4),
+                    1.5 + (-1 + Math.random() * 2),
+                    -4.5 + 0.1
+                );
+            }
         }
     }
 
     private async createDesk(): Promise<void> {
+        const deskMaterial = new BABYLON.StandardMaterial("deskMaterial", this.game.scene);
+        deskMaterial.diffuseColor = new BABYLON.Color3(0.396, 0.263, 0.129); // 어두운 갈색
+
         // 책상
-        const deskGeometry = new THREE.BoxGeometry(2, 0.1, 1);
-        const deskMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
-        const desk = new THREE.Mesh(deskGeometry, deskMaterial);
-        desk.position.set(0, 1, 2);
-        desk.castShadow = true;
-        this.game.scene.add(desk);
+        const desk = BABYLON.MeshBuilder.CreateBox("desk", {
+            width: 2,
+            height: 0.1,
+            depth: 1
+        }, this.game.scene);
+        desk.position = new BABYLON.Vector3(0, 1, 2);
+        desk.material = deskMaterial;
 
         // 책상 다리들
         for (let i = 0; i < 4; i++) {
-            const legGeometry = new THREE.BoxGeometry(0.1, 1, 0.1);
-            const leg = new THREE.Mesh(legGeometry, deskMaterial);
+            const leg = BABYLON.MeshBuilder.CreateBox("deskLeg", {
+                width: 0.1,
+                height: 1,
+                depth: 0.1
+            }, this.game.scene);
             const x = i % 2 === 0 ? -0.9 : 0.9;
             const z = i < 2 ? 1.5 : 2.5;
-            leg.position.set(x, 0.5, z);
-            leg.castShadow = true;
-            this.game.scene.add(leg);
+            leg.position = new BABYLON.Vector3(x, 0.5, z);
+            leg.material = deskMaterial;
         }
     }
 
     private async createLibraryPuzzles(): Promise<void> {
         // 퍼즐 1: 책상 위의 열쇠
-        const keyGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.3);
-        const keyMaterial = new THREE.MeshLambertMaterial({ color: 0xffd700 });
-        const key = new THREE.Mesh(keyGeometry, keyMaterial);
-        key.position.set(0.5, 1.15, 2);
+        const key = BABYLON.MeshBuilder.CreateCylinder("key", {
+            height: 0.3,
+            diameter: 0.04
+        }, this.game.scene);
+        
+        const keyMaterial = new BABYLON.StandardMaterial("keyMaterial", this.game.scene);
+        keyMaterial.diffuseColor = new BABYLON.Color3(1, 0.843, 0); // 금색
+        keyMaterial.emissiveColor = new BABYLON.Color3(0.1, 0.1, 0);
+        key.material = keyMaterial;
+        
+        key.position = new BABYLON.Vector3(0.5, 1.15, 2);
         key.rotation.z = Math.PI / 2;
-        key.castShadow = true;
-        key.userData = { 
+        key.metadata = { 
             type: 'key', 
             id: 'library_key_1',
             interactive: true 
         };
-        this.game.scene.add(key);
 
         // 퍼즐 2: 숨겨진 서랍
-        const drawerGeometry = new THREE.BoxGeometry(0.8, 0.1, 0.3);
-        const drawerMaterial = new THREE.MeshLambertMaterial({ color: 0x8b4513 });
-        const drawer = new THREE.Mesh(drawerGeometry, drawerMaterial);
-        drawer.position.set(-0.5, 0.8, 1.8);
-        drawer.castShadow = true;
-        drawer.userData = { 
+        const drawer = BABYLON.MeshBuilder.CreateBox("drawer", {
+            width: 0.8,
+            height: 0.1,
+            depth: 0.3
+        }, this.game.scene);
+        
+        const drawerMaterial = new BABYLON.StandardMaterial("drawerMaterial", this.game.scene);
+        drawerMaterial.diffuseColor = new BABYLON.Color3(0.545, 0.271, 0.075);
+        drawer.material = drawerMaterial;
+        
+        drawer.position = new BABYLON.Vector3(-0.5, 0.8, 1.8);
+        drawer.metadata = { 
             type: 'drawer', 
             id: 'secret_drawer',
             interactive: true,
             locked: true 
         };
-        this.game.scene.add(drawer);
     }
 
     private async loadLabRoom(): Promise<void> {
@@ -202,92 +209,85 @@ export class SceneManager {
 
     private async loadMysteryRoom(): Promise<void> {
         // 미스터리 방 구현 (향후 확장)
-        console.log('🏚️ 미스터리 방 로딩...');
+        console.log('🔮 미스터리 방 로딩...');
         // 임시: 라이브러리와 동일
         await this.loadLibraryRoom();
     }
 
     private setupRoomLighting(): void {
-        // 방 전용 조명
-        const roomLight = new THREE.PointLight(0xffffff, 0.8, 10);
-        roomLight.position.set(0, 4, 0);
-        roomLight.castShadow = true;
-        this.game.scene.add(roomLight);
+        // 추가 조명 (기본 환경 조명은 VRGame에서 설정됨)
+        const pointLight = new BABYLON.PointLight("roomLight", new BABYLON.Vector3(0, 3, 0), this.game.scene);
+        pointLight.intensity = 0.5;
+        pointLight.diffuse = new BABYLON.Color3(1, 0.9, 0.7); // 따뜻한 빛
     }
 
     public showVRUI(): void {
-        if (!this.vrUI) {
+        if (this.vrUI.length === 0) {
             this.createVRUI();
         }
-        if (this.vrUI) {
-            this.vrUI.visible = true;
-        }
+        this.vrUI.forEach(ui => ui.setEnabled(true));
     }
 
     public hideVRUI(): void {
-        if (this.vrUI) {
-            this.vrUI.visible = false;
-        }
+        this.vrUI.forEach(ui => ui.setEnabled(false));
     }
 
     private createVRUI(): void {
-        this.vrUI = new THREE.Group();
-
-        // VR용 타이머 패널
-        const panelGeometry = new THREE.PlaneGeometry(1, 0.3);
-        const panelMaterial = new THREE.MeshBasicMaterial({ 
-            color: 0x000000, 
-            transparent: true, 
-            opacity: 0.7 
-        });
-        const panel = new THREE.Mesh(panelGeometry, panelMaterial);
-        panel.position.set(-2, 2, -1);
-        panel.lookAt(this.game.camera.position);
+        // VR 전용 UI 요소들 생성
+        const uiPanel = BABYLON.MeshBuilder.CreatePlane("vrUIPanel", {
+            width: 2,
+            height: 1
+        }, this.game.scene);
         
-        this.vrUI.add(panel);
-        this.game.scene.add(this.vrUI);
+        const uiMaterial = new BABYLON.StandardMaterial("vrUIMaterial", this.game.scene);
+        uiMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+        uiMaterial.alpha = 0.7;
+        uiPanel.material = uiMaterial;
+        
+        uiPanel.position = new BABYLON.Vector3(0, 2, -3);
+        uiPanel.setEnabled(false);
+        
+        this.vrUI.push(uiPanel);
     }
 
     public update(): void {
-        // 씬 업데이트 로직
-        if (this.vrUI && this.vrUI.visible) {
-            // VR UI를 항상 카메라를 바라보도록
-            this.vrUI.lookAt(this.game.camera.position);
+        // 애니메이션이나 동적 업데이트가 필요한 경우
+        if (this.currentRoom) {
+            // 현재는 정적 씬이므로 특별한 업데이트 없음
         }
     }
 
     private clearRoom(): void {
-        // 현재 방의 모든 오브젝트 제거
-        const objectsToRemove: THREE.Object3D[] = [];
-        
-        this.game.scene.traverse((child: any) => {
-            if (child !== this.game.camera && 
-                !this.game.controllers.includes(child as THREE.Group) &&
-                !this.game.hands.includes(child as THREE.Group) &&
-                child.type !== 'AmbientLight' &&
-                child.type !== 'DirectionalLight') {
-                objectsToRemove.push(child);
+        // 현재 방의 모든 메시들을 제거
+        const meshesToRemove = this.game.scene.meshes.filter(mesh => 
+            mesh.name !== 'camera' && 
+            mesh.name !== '__root__' &&
+            !mesh.name.startsWith('xr') &&
+            !mesh.name.startsWith('controller')
+        );
+
+        meshesToRemove.forEach(mesh => {
+            if (mesh.material) {
+                mesh.material.dispose();
             }
+            mesh.dispose();
         });
 
-        objectsToRemove.forEach(obj => {
-            this.game.scene.remove(obj);
-            if ('geometry' in obj) {
-                (obj as any).geometry?.dispose();
-            }
-            if ('material' in obj) {
-                const material = (obj as any).material;
-                if (Array.isArray(material)) {
-                    material.forEach(mat => mat?.dispose());
-                } else {
-                    material?.dispose();
-                }
-            }
+        // 추가된 조명들도 제거
+        const lightsToRemove = this.game.scene.lights.filter(light => 
+            light.name !== 'light' // 기본 조명은 유지
+        );
+
+        lightsToRemove.forEach(light => {
+            light.dispose();
         });
+
+        console.log('🧹 이전 방 정리 완료');
     }
 
     public dispose(): void {
         this.clearRoom();
-        this.gltfLoader = null as any;
+        this.vrUI.forEach(ui => ui.dispose());
+        this.vrUI = [];
     }
 } 

@@ -1,23 +1,25 @@
 // @ts-nocheck
-import * as THREE from 'three';
+import * as BABYLON from '@babylonjs/core';
 import type { VRGame } from './VRGame';
 
 export class InputManager {
     private game: VRGame;
-    private raycaster: THREE.Raycaster;
-    private intersectedObject: THREE.Object3D | null = null;
-    private selectedObject: THREE.Object3D | null = null;
+    private scene: BABYLON.Scene;
+    private camera: BABYLON.Camera;
+    private intersectedMesh: BABYLON.Mesh | null = null;
+    private selectedMesh: BABYLON.Mesh | null = null;
     
     // 키보드 상태
     private keys: { [key: string]: boolean } = {};
     
     // 마우스 상태
-    private mouse = new THREE.Vector2();
     private isMouseDown = false;
+    private pointerLocked = false;
 
     constructor(game: VRGame) {
         this.game = game;
-        this.raycaster = new THREE.Raycaster();
+        this.scene = game.scene;
+        this.camera = game.camera;
         this.setupEventListeners();
     }
 
@@ -26,47 +28,43 @@ export class InputManager {
         document.addEventListener('keydown', (event) => this.onKeyDown(event));
         document.addEventListener('keyup', (event) => this.onKeyUp(event));
         
-        // 마우스 이벤트 (2D 모드용)
-        window.addEventListener('mousemove', (event) => this.onMouseMove(event));
-        window.addEventListener('mousedown', (event) => this.onMouseDown(event));
-        window.addEventListener('mouseup', (event) => this.onMouseUp(event));
+        // 마우스 이벤트 (3D 모드용)
+        this.scene.onPointerObservable.add((pointerInfo) => {
+            this.onPointerEvent(pointerInfo);
+        });
         
         // 포인터 락 이벤트
         document.addEventListener('pointerlockchange', () => this.onPointerLockChange());
     }
 
-    // VR 컨트롤러 이벤트 (VRGame에서 호출)
-    public onSelectStart(event: any): void {
-        const controller = event.target;
-        
-        // 레이캐스팅을 통한 오브젝트 감지
-        // VR 컨트롤러의 위치와 방향을 이용해 레이캐스팅 설정
-        const tempMatrix = new THREE.Matrix4();
-        tempMatrix.identity().extractRotation(controller.matrixWorld);
-        
-        this.raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-        this.raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-        
-        const intersects = this.raycaster.intersectObjects(this.game.scene.children, true);
-        
-        if (intersects.length > 0) {
-            const intersected = intersects[0].object;
-            if (intersected.userData.interactive) {
-                this.selectedObject = intersected;
-                this.onObjectSelected(intersected);
-                
-                // 햅틱 피드백
-                if (controller.gamepad && controller.gamepad.hapticActuators) {
-                    controller.gamepad.hapticActuators[0].pulse(0.5, 100);
-                }
-            }
+    private onPointerEvent(pointerInfo: BABYLON.PointerInfo): void {
+        switch (pointerInfo.type) {
+            case BABYLON.PointerEventTypes.POINTERMOVE:
+                this.onPointerMove(pointerInfo);
+                break;
+            case BABYLON.PointerEventTypes.POINTERDOWN:
+                this.onPointerDown(pointerInfo);
+                break;
+            case BABYLON.PointerEventTypes.POINTERUP:
+                this.onPointerUp(pointerInfo);
+                break;
         }
     }
 
+    // VR 컨트롤러 이벤트 (VRGame에서 호출)
+    public onSelectStart(event: any): void {
+        console.log('VR 컨트롤러 선택 시작:', event);
+        
+        // VR 컨트롤러 레이캐스팅은 VRController에서 처리
+        // 여기서는 일반적인 상호작용만 처리
+    }
+
     public onSelectEnd(event: any): void {
-        if (this.selectedObject) {
-            this.onObjectReleased(this.selectedObject);
-            this.selectedObject = null;
+        console.log('VR 컨트롤러 선택 종료:', event);
+        
+        if (this.selectedMesh) {
+            this.onObjectReleased(this.selectedMesh);
+            this.selectedMesh = null;
         }
     }
 
@@ -88,6 +86,10 @@ export class InputManager {
             case 'Escape':
                 this.exitPointerLock();
                 break;
+            case 'KeyC':
+                // 카메라 컨트롤 토글
+                this.toggleCameraControls();
+                break;
         }
     }
 
@@ -95,32 +97,31 @@ export class InputManager {
         this.keys[event.code] = false;
     }
 
-    // 마우스 이벤트 핸들러
-    private onMouseMove(event: MouseEvent): void {
-        if (document.pointerLockElement === this.game.renderer.domElement) {
+    // 포인터/마우스 이벤트 핸들러
+    private onPointerMove(pointerInfo: BABYLON.PointerInfo): void {
+        if (this.pointerLocked) {
             // 포인터 락 상태에서 카메라 회전
-            const movementX = event.movementX || 0;
-            const movementY = event.movementY || 0;
+            const deltaX = pointerInfo.event.movementX || 0;
+            const deltaY = pointerInfo.event.movementY || 0;
             
-            this.game.camera.rotation.y -= movementX * 0.002;
-            this.game.camera.rotation.x -= movementY * 0.002;
-            this.game.camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, this.game.camera.rotation.x));
+            if (this.camera instanceof BABYLON.FreeCamera) {
+                this.camera.rotation.y -= deltaX * 0.002;
+                this.camera.rotation.x -= deltaY * 0.002;
+                this.camera.rotation.x = BABYLON.Scalar.Clamp(this.camera.rotation.x, -Math.PI/2, Math.PI/2);
+            }
         } else {
             // 일반 마우스 이동 - 오브젝트 하이라이트용
-            this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            
-            this.updateMouseRaycasting();
+            this.updateMouseRaycasting(pointerInfo);
         }
     }
 
-    private onMouseDown(event: MouseEvent): void {
+    private onPointerDown(pointerInfo: BABYLON.PointerInfo): void {
         this.isMouseDown = true;
         
-        if (event.button === 0) { // 좌클릭
-            if (!document.pointerLockElement) {
+        if (pointerInfo.event.button === 0) { // 좌클릭
+            if (!this.pointerLocked) {
                 // 포인터 락 요청
-                this.game.renderer.domElement.requestPointerLock();
+                this.requestPointerLock();
             } else {
                 // 오브젝트 상호작용
                 this.interactWithObject();
@@ -128,190 +129,255 @@ export class InputManager {
         }
     }
 
-    private onMouseUp(event: MouseEvent): void {
+    private onPointerUp(pointerInfo: BABYLON.PointerInfo): void {
         this.isMouseDown = false;
     }
 
+    private requestPointerLock(): void {
+        const canvas = this.game.canvas;
+        if (canvas && canvas.requestPointerLock) {
+            canvas.requestPointerLock();
+        }
+    }
+
     private onPointerLockChange(): void {
-        if (document.pointerLockElement === this.game.renderer.domElement) {
+        const canvas = this.game.canvas;
+        this.pointerLocked = document.pointerLockElement === canvas;
+        
+        if (this.pointerLocked) {
             console.log('포인터 락 활성화');
         } else {
             console.log('포인터 락 해제');
         }
     }
 
-    private updateMouseRaycasting(): void {
-        this.raycaster.setFromCamera(this.mouse, this.game.camera);
-        const intersects = this.raycaster.intersectObjects(this.game.scene.children, true);
+    private updateMouseRaycasting(pointerInfo: BABYLON.PointerInfo): void {
+        // 마우스 위치에서 레이캐스팅
+        const pickInfo = this.scene.pick(pointerInfo.event.offsetX, pointerInfo.event.offsetY);
         
         // 이전 하이라이트 제거
-        if (this.intersectedObject) {
-            this.removeHighlight(this.intersectedObject);
-            this.intersectedObject = null;
+        if (this.intersectedMesh) {
+            this.removeHighlight(this.intersectedMesh);
+            this.intersectedMesh = null;
         }
         
         // 새로운 오브젝트 하이라이트
-        if (intersects.length > 0) {
-            const intersected = intersects[0].object;
-            if (intersected.userData.interactive) {
-                this.intersectedObject = intersected;
-                this.addHighlight(intersected);
+        if (pickInfo && pickInfo.hit && pickInfo.pickedMesh) {
+            const mesh = pickInfo.pickedMesh as BABYLON.Mesh;
+            if (mesh.metadata && mesh.metadata.interactive) {
+                this.intersectedMesh = mesh;
+                this.addHighlight(mesh);
             }
         }
     }
 
-    private addHighlight(object: THREE.Object3D): void {
+    private addHighlight(mesh: BABYLON.Mesh): void {
         // 오브젝트 하이라이트 효과
-        if (object instanceof THREE.Mesh && object.material) {
-            const material = object.material as THREE.MeshLambertMaterial;
-            if (!object.userData.originalColor) {
-                object.userData.originalColor = material.color.clone();
+        if (mesh.material instanceof BABYLON.StandardMaterial) {
+            const material = mesh.material;
+            if (!mesh.metadata.originalColor) {
+                mesh.metadata.originalColor = material.diffuseColor.clone();
             }
-            material.color.setHex(0xffff00); // 노란색 하이라이트
+            material.diffuseColor = new BABYLON.Color3(1, 1, 0); // 노란색 하이라이트
         }
     }
 
-    private removeHighlight(object: THREE.Object3D): void {
+    private removeHighlight(mesh: BABYLON.Mesh): void {
         // 하이라이트 제거
-        if (object instanceof THREE.Mesh && object.material && object.userData.originalColor) {
-            const material = object.material as THREE.MeshLambertMaterial;
-            material.color.copy(object.userData.originalColor);
+        if (mesh.material instanceof BABYLON.StandardMaterial && mesh.metadata.originalColor) {
+            const material = mesh.material;
+            material.diffuseColor = mesh.metadata.originalColor;
         }
     }
 
-    private onObjectSelected(object: THREE.Object3D): void {
-        console.log(`오브젝트 선택됨: ${object.userData.type} (${object.userData.id})`);
+    private onObjectSelected(mesh: BABYLON.Mesh): void {
+        if (!mesh.metadata) return;
+        
+        console.log(`오브젝트 선택됨: ${mesh.metadata.type} (${mesh.metadata.id})`);
         
         // 오브젝트 타입별 처리
-        switch (object.userData.type) {
+        switch (mesh.metadata.type) {
             case 'key':
-                this.handleKeyInteraction(object);
+                this.handleKeyInteraction(mesh);
                 break;
             case 'drawer':
-                this.handleDrawerInteraction(object);
+                this.handleDrawerInteraction(mesh);
                 break;
             case 'door':
-                this.handleDoorInteraction(object);
+                this.handleDoorInteraction(mesh);
                 break;
             default:
                 console.log('상호작용 가능한 오브젝트입니다.');
         }
     }
 
-    private onObjectReleased(object: THREE.Object3D): void {
-        console.log(`오브젝트 해제됨: ${object.userData.type}`);
+    private onObjectReleased(mesh: BABYLON.Mesh): void {
+        console.log(`오브젝트 해제됨: ${mesh.metadata?.type}`);
     }
 
-    private handleKeyInteraction(keyObject: THREE.Object3D): void {
-        // 열쇠 줍기
-        this.game.gameState.addToInventory({
-            id: keyObject.userData.id,
-            type: 'key',
-            name: '황금 열쇠',
-            object: keyObject
-        });
+    private handleKeyInteraction(keyMesh: BABYLON.Mesh): void {
+        if (!keyMesh.metadata) return;
         
-        // 씬에서 제거
-        this.game.scene.remove(keyObject);
-        console.log('🔑 열쇠를 획득했습니다!');
+        console.log(`🔑 열쇠 수집: ${keyMesh.metadata.id}`);
+        
+        // 게임 상태에 열쇠 추가
+        this.game.gameState.addItem('key', keyMesh.metadata.id);
+        
+        // 오디오 재생
+        this.game.audioManager.onKeyPickup();
+        
+        // 오브젝트 제거
+        keyMesh.dispose();
+        
+        console.log('✅ 열쇠를 획득했습니다!');
     }
 
-    private handleDrawerInteraction(drawerObject: THREE.Object3D): void {
-        if (drawerObject.userData.locked) {
-            // 열쇠가 있는지 확인
-            const hasKey = this.game.gameState.hasItemInInventory('library_key_1');
+    private handleDrawerInteraction(drawerMesh: BABYLON.Mesh): void {
+        if (!drawerMesh.metadata) return;
+        
+        if (drawerMesh.metadata.locked) {
+            // 열쇠가 필요한 서랍
+            const hasKey = this.game.gameState.hasItem('key', 'library_key_1');
             if (hasKey) {
-                drawerObject.userData.locked = false;
                 console.log('🔓 서랍이 열렸습니다!');
+                drawerMesh.metadata.locked = false;
                 
-                // 서랍 애니메이션 (간단한 이동)
-                const drawer = drawerObject as THREE.Mesh;
-                drawer.position.z += 0.2;
+                // 서랍 열기 애니메이션 (간단한 이동)
+                BABYLON.Animation.CreateAndStartAnimation(
+                    "drawerOpen",
+                    drawerMesh,
+                    "position.z",
+                    30,
+                    30,
+                    drawerMesh.position.z,
+                    drawerMesh.position.z + 0.3,
+                    BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+                );
                 
-                this.game.gameState.addScore(100);
+                this.game.audioManager.onDrawerOpen();
+                this.game.gameState.addScore(50);
             } else {
-                console.log('🔒 서랍이 잠겨있습니다. 열쇠가 필요합니다.');
+                console.log('🔒 이 서랍은 잠겨있습니다. 열쇠가 필요해요.');
             }
         } else {
-            console.log('서랍이 이미 열려있습니다.');
+            console.log('📦 서랍을 확인했습니다.');
         }
     }
 
-    private handleDoorInteraction(doorObject: THREE.Object3D): void {
-        console.log('🚪 문과 상호작용');
-        // 문 열기 로직 (향후 구현)
+    private handleDoorInteraction(doorMesh: BABYLON.Mesh): void {
+        console.log('🚪 문과 상호작용했습니다.');
+        // 문 열기 로직 구현
     }
 
-    // 유틸리티 메서드들
     private showHint(): void {
-        this.game.gameState.useHint();
+        console.log('💡 힌트: 주변을 자세히 살펴보세요!');
+        this.game.audioManager.onHintShow();
     }
 
     private toggleInventory(): void {
-        console.log('📦 인벤토리 토글');
-        // 인벤토리 UI 토글 (향후 구현)
+        console.log('🎒 인벤토리 토글');
+        // 인벤토리 UI 토글 로직
     }
 
     private interactWithObject(): void {
-        if (this.intersectedObject) {
-            this.onObjectSelected(this.intersectedObject);
+        if (this.intersectedMesh) {
+            this.selectedMesh = this.intersectedMesh;
+            this.onObjectSelected(this.intersectedMesh);
+        } else {
+            // 중앙 화면에서 레이캐스팅
+            const pickInfo = this.scene.pick(
+                this.scene.getEngine().getRenderWidth() / 2,
+                this.scene.getEngine().getRenderHeight() / 2
+            );
+            
+            if (pickInfo && pickInfo.hit && pickInfo.pickedMesh) {
+                const mesh = pickInfo.pickedMesh as BABYLON.Mesh;
+                if (mesh.metadata && mesh.metadata.interactive) {
+                    this.selectedMesh = mesh;
+                    this.onObjectSelected(mesh);
+                }
+            }
         }
     }
 
     private exitPointerLock(): void {
-        if (document.pointerLockElement) {
+        if (document.exitPointerLock) {
             document.exitPointerLock();
         }
     }
 
-    // 메인 업데이트 루프
+    private toggleCameraControls(): void {
+        console.log('🎮 카메라 컨트롤 토글 시도...');
+        
+        if (!(this.camera instanceof BABYLON.FreeCamera)) {
+            console.warn('⚠️ 카메라가 FreeCamera가 아닙니다.');
+            return;
+        }
+
+        const freeCamera = this.camera as BABYLON.FreeCamera;
+        
+        try {
+            // inputs가 존재하는지 확인
+            if (!freeCamera.inputs) {
+                console.warn('⚠️ 카메라 inputs이 초기화되지 않았습니다.');
+                return;
+            }
+
+            // 현재 연결된 입력 확인
+            const hasKeyboard = freeCamera.inputs.attached && freeCamera.inputs.attached.keyboard;
+            const hasMouse = freeCamera.inputs.attached && freeCamera.inputs.attached.mouse;
+
+            if (hasKeyboard || hasMouse) {
+                // 입력 제거
+                if (hasKeyboard) {
+                    freeCamera.inputs.removeByType("FreeCameraKeyboardMoveInput");
+                }
+                if (hasMouse) {
+                    freeCamera.inputs.removeByType("FreeCameraMouseInput");
+                }
+                console.log('✅ 카메라 컨트롤 해제됨');
+            } else {
+                // 입력 추가
+                freeCamera.inputs.addKeyboard();
+                freeCamera.inputs.addMouse();
+                console.log('✅ 카메라 컨트롤 활성화됨');
+            }
+        } catch (error) {
+            console.error('❌ 카메라 컨트롤 토글 실패:', error);
+            
+            // 최후의 수단: attachControls/detachControls 시도
+            try {
+                if (typeof freeCamera.attachControls === 'function') {
+                    freeCamera.attachControls(this.game.canvas, true);
+                    console.log('✅ attachControls로 카메라 활성화됨');
+                } else {
+                    console.warn('⚠️ attachControls 메서드를 사용할 수 없습니다.');
+                }
+            } catch (fallbackError) {
+                console.error('❌ 카메라 컨트롤 완전 실패:', fallbackError);
+            }
+        }
+    }
+
     public update(): void {
         this.handleMovement();
-        this.updateControllerRaycasting();
     }
 
     private handleMovement(): void {
-        if (!document.pointerLockElement) return;
+        // Babylon.js FreeCamera는 이미 WASD 키 컨트롤이 내장되어 있음
+        // 포인터 락 상태에서만 추가 처리가 필요한 경우에만 구현
         
-        const moveSpeed = 0.1;
-        const direction = new THREE.Vector3();
-        
-        // WASD 이동
-        if (this.keys['KeyW']) direction.z -= 1;
-        if (this.keys['KeyS']) direction.z += 1;
-        if (this.keys['KeyA']) direction.x -= 1;
-        if (this.keys['KeyD']) direction.x += 1;
-        
-        if (direction.length() > 0) {
-            direction.normalize();
-            direction.multiplyScalar(moveSpeed);
-            
-            // 카메라 방향에 따른 이동
-            direction.applyQuaternion(this.game.camera.quaternion);
-            this.game.camera.position.add(direction);
-        }
+        // 현재는 기본 카메라 컨트롤을 사용하므로 별도 처리 불필요
+        // 필요한 경우 여기에 추가 로직 구현
     }
 
-    private updateControllerRaycasting(): void {
-        // VR 컨트롤러 레이캐스팅 (VR 모드에서만)
-        if (this.game.renderer.xr.isPresenting) {
-            this.game.controllers.forEach((controller, index) => {
-                if (controller.visible) {
-                    this.raycaster.setFromXRController(controller);
-                    const intersects = this.raycaster.intersectObjects(this.game.scene.children, true);
-                    
-                    // 컨트롤러 레이저 포인터 업데이트 (향후 구현)
-                    this.updateControllerPointer(controller, intersects);
-                }
-            });
-        }
-    }
-
-    private updateControllerPointer(controller: THREE.Group, intersects: THREE.Intersection[]): void {
-        // 컨트롤러 레이저 포인터 시각화 (향후 구현)
-        // 현재는 콘솔 로그만
-        if (intersects.length > 0 && intersects[0].object.userData.interactive) {
-            // console.log(`컨트롤러가 상호작용 가능한 오브젝트를 가리키고 있습니다: ${intersects[0].object.userData.type}`);
-        }
+    public dispose(): void {
+        // 이벤트 리스너 정리
+        document.removeEventListener('keydown', (event) => this.onKeyDown(event));
+        document.removeEventListener('keyup', (event) => this.onKeyUp(event));
+        document.removeEventListener('pointerlockchange', () => this.onPointerLockChange());
+        
+        // 포인터 락 해제
+        this.exitPointerLock();
     }
 } 

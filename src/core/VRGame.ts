@@ -1,7 +1,6 @@
 // @ts-nocheck
 import * as BABYLON from '@babylonjs/core';
 import '@babylonjs/core/Debug/debugLayer';
-import '@babylonjs/inspector';
 
 import { SceneManager } from './SceneManager';
 import { InputManager } from './InputManager';
@@ -62,8 +61,27 @@ export class VRGame {
         
         // 카메라 생성
         this.camera = new BABYLON.FreeCamera("camera", new BABYLON.Vector3(0, 1.6, -5), this.scene);
-        this.camera.attachControls(this.canvas, true);
         this.camera.setTarget(BABYLON.Vector3.Zero());
+        
+        // 카메라 컨트롤 설정 (안전한 방법)
+        try {
+            if (this.camera && typeof this.camera.attachControls === 'function') {
+                this.camera.attachControls(this.canvas, true);
+                console.log('✅ 카메라 컨트롤 연결 성공');
+            } else {
+                console.warn('⚠️ attachControls 메서드를 사용할 수 없습니다. 수동 컨트롤 설정...');
+                this.setupManualCameraControls();
+            }
+        } catch (error) {
+            console.error('❌ 카메라 컨트롤 설정 실패:', error);
+            this.setupManualCameraControls();
+        }
+        
+        // 카메라 속성 설정
+        if (this.camera instanceof BABYLON.FreeCamera) {
+            this.camera.speed = 0.5;
+            this.camera.angularSensibility = 2000;
+        }
 
         // 조명 생성
         const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), this.scene);
@@ -80,6 +98,35 @@ export class VRGame {
         console.log('✅ Babylon.js 씬 초기화 완료');
     }
 
+    private setupManualCameraControls(): void {
+        console.log('🔧 수동 카메라 컨트롤 설정 중...');
+        
+        if (!(this.camera instanceof BABYLON.FreeCamera)) {
+            console.warn('카메라가 FreeCamera가 아닙니다.');
+            return;
+        }
+
+        try {
+            // 키보드 입력 설정
+            this.camera.inputs.addKeyboard();
+            console.log('✅ 키보드 입력 추가됨');
+            
+            // 마우스 입력 설정
+            this.camera.inputs.addMouse();
+            console.log('✅ 마우스 입력 추가됨');
+            
+        } catch (error) {
+            console.error('❌ 수동 카메라 컨트롤 설정 실패:', error);
+            
+            // 최후의 수단: 기본 설정만 사용
+            this.camera.speed = 0.5;
+            this.camera.angularSensibility = 2000;
+            console.log('⚠️ 기본 카메라 설정만 적용됨');
+        }
+
+        console.log('✅ 수동 카메라 컨트롤 설정 완료');
+    }
+
     private initializeManagers(): void {
         console.log('📋 게임 매니저 초기화 중...');
         
@@ -88,6 +135,9 @@ export class VRGame {
         this.inputManager = new InputManager(this);
         this.gameState = new GameStateManager(this);
         this.audioManager = new AudioManager(this);
+
+        // 기본 방 로드
+        this.sceneManager.loadRoom('library');
 
         console.log('✅ 게임 매니저 초기화 완료');
     }

@@ -1,7 +1,6 @@
 // @ts-nocheck
 import * as BABYLON from '@babylonjs/core';
 import '@babylonjs/core/Debug/debugLayer';
-import '@babylonjs/inspector';
 
 export class VRController {
     private game: any;

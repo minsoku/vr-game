@@ -1,9 +1,13 @@
 // @ts-nocheck
 import * as BABYLON from '@babylonjs/core';
 import '@babylonjs/core/Debug/debugLayer';
-import '@babylonjs/inspector';
 import { VRGame } from './core/VRGame';
 import { LoadingManager } from './utils/LoadingManager';
+
+// Inspector는 개발 모드에서만 로드
+if (import.meta.env.DEV) {
+    import('@babylonjs/inspector');
+}
 
 // VR 디버깅용 콘솔 래퍼
 class DebugConsole {

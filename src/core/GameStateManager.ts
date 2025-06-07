@@ -99,6 +99,22 @@ export class GameStateManager {
         return this.inventory.some(item => item.id === itemId);
     }
 
+    // 특정 타입의 아이템 추가 (간단한 형태)
+    public addItem(type: string, id: string): void {
+        const item: InventoryItem = {
+            id: id,
+            type: type,
+            name: type === 'key' ? '열쇠' : '아이템',
+            object: null
+        };
+        this.addToInventory(item);
+    }
+
+    // 특정 타입의 아이템 확인
+    public hasItem(type: string, id: string): boolean {
+        return this.inventory.some(item => item.type === type && item.id === id);
+    }
+
     public getInventory(): InventoryItem[] {
         return [...this.inventory];
     }
