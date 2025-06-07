@@ -1,5 +1,8 @@
 // @ts-nocheck
-import { SimpleVRGame } from './core/SimpleVRGame';
+import * as BABYLON from '@babylonjs/core';
+import '@babylonjs/core/Debug/debugLayer';
+import '@babylonjs/inspector';
+import { VRGame } from './core/VRGame';
 import { LoadingManager } from './utils/LoadingManager';
 
 // VR 디버깅용 콘솔 래퍼
@@ -115,9 +118,10 @@ class DebugConsole {
 }
 
 class QuestEscapeVR {
-    private game: SimpleVRGame | null = null;
+    private game: VRGame | null = null;
     private loadingManager: LoadingManager;
     private debugConsole: DebugConsole;
+    private canvas: HTMLCanvasElement | null = null;
 
     constructor() {
         this.loadingManager = new LoadingManager();
@@ -130,9 +134,15 @@ class QuestEscapeVR {
             // 로딩 시작
             this.loadingManager.show('게임 초기화 중...');
 
-            // VR 게임 인스턴스 생성 (WebXR 지원 확인은 나중에)
-            console.log('🎮 SimpleVRGame 인스턴스 생성 중...');
-            this.game = new SimpleVRGame();
+            // 캔버스 생성 또는 가져오기
+            this.canvas = this.getOrCreateCanvas();
+
+            // VR 게임 인스턴스 생성
+            console.log('🎮 Babylon.js VRGame 인스턴스 생성 중...');
+            this.game = new VRGame(this.canvas);
+
+            // 렌더링 루프 시작
+            this.game.startRenderLoop();
 
             // 로딩 완료
             this.loadingManager.hide();
@@ -141,11 +151,44 @@ class QuestEscapeVR {
             this.setupUI();
 
             console.log('🎮 Quest Escape VR이 성공적으로 초기화되었습니다!');
-            console.log('💡 마우스를 클릭하여 포인터 락을 활성화하세요.');
+            console.log('💡 VR 버튼을 클릭하여 VR 모드를 시작하세요.');
         } catch (error) {
             console.error('게임 초기화 실패:', error);
             this.showError(error as Error);
         }
+    }
+
+    private getOrCreateCanvas(): HTMLCanvasElement {
+        // 기존 캔버스가 있는지 확인
+        let canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
+        
+        if (!canvas) {
+            // 캔버스 생성
+            canvas = document.createElement('canvas');
+            canvas.id = 'renderCanvas';
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
+            canvas.style.display = 'block';
+            canvas.style.position = 'absolute';
+            canvas.style.top = '0';
+            canvas.style.left = '0';
+            canvas.style.zIndex = '1';
+            
+            // body에 추가
+            document.body.appendChild(canvas);
+        }
+
+        // 캔버스 크기 설정
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // 리사이즈 이벤트 리스너
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        return canvas;
     }
 
     private setupUI(): void {
@@ -158,20 +201,20 @@ class QuestEscapeVR {
                 this.startVRMode();
             });
 
-            // VR 지원 확인
-            this.game.checkVRSupport().then((supported: boolean) => {
+            // VR 지원 확인 (Babylon.js 방식)
+            this.checkVRSupport().then((supported: boolean) => {
                 if (!supported) {
-                    vrButton.textContent = '2D 모드로 플레이';
-                    vrButton.title = 'VR이 지원되지 않아 2D 모드로 실행됩니다';
-                    console.log('❌ VR 지원되지 않음 - 2D 모드로 설정');
+                    vrButton.textContent = '3D 모드로 플레이';
+                    vrButton.title = 'VR이 지원되지 않아 3D 모드로 실행됩니다';
+                    console.log('❌ VR 지원되지 않음 - 3D 모드로 설정');
                 } else {
                     console.log('✅ VR 지원됨 - VR 버튼 활성화');
                     vrButton.title = '메타 퀘스트에서 VR 모드로 체험하세요';
                 }
             }).catch((error) => {
                 console.error('❌ VR 지원 확인 중 오류:', error);
-                vrButton.textContent = '2D 모드로 플레이';
-                vrButton.title = 'VR 확인 실패 - 2D 모드로 실행됩니다';
+                vrButton.textContent = '3D 모드로 플레이';
+                vrButton.title = 'VR 확인 실패 - 3D 모드로 실행됩니다';
             });
         }
 
@@ -179,11 +222,22 @@ class QuestEscapeVR {
             uiOverlay.style.display = 'block';
         }
 
-        // 키보드 컨트롤 안내 (2D 모드용)
+        // 키보드 컨트롤 안내 (3D 모드용)
         this.showControls();
 
         // 컨트롤러 강제 활성화 버튼 설정
         this.setupControllerActivateButton();
+    }
+
+    private async checkVRSupport(): Promise<boolean> {
+        try {
+            // Babylon.js WebXR 지원 확인
+            const supported = await BABYLON.WebXRSessionManager.IsSessionSupportedAsync('immersive-vr');
+            return supported;
+        } catch (error) {
+            console.error('VR 지원 확인 실패:', error);
+            return false;
+        }
     }
 
     private async startVRMode(): Promise<void> {
@@ -200,68 +254,27 @@ class QuestEscapeVR {
             vrButton.disabled = true;
             vrButton.textContent = 'VR 모드 시작 중...';
 
-            // 브라우저 환경 확인
-            console.log('🌐 브라우저 정보:');
-            console.log('- User Agent:', navigator.userAgent);
-            console.log('- Platform:', navigator.platform);
-            console.log('- WebXR 지원:', 'xr' in navigator);
+            // Babylon.js VR 모드 시작
+            await this.game.enterVRMode();
+
+            console.log('🥽 VR 모드가 성공적으로 시작되었습니다!');
             
-            if ('xr' in navigator) {
-                console.log('- XR API 존재함');
-                try {
-                    const xr = (navigator as any).xr;
-                    console.log('- XR 객체:', xr);
-                    console.log('- isSessionSupported 메서드:', typeof xr.isSessionSupported);
-                } catch (e) {
-                    console.error('- XR 객체 접근 오류:', e);
-                }
-            } else {
-                console.error('- WebXR API가 없습니다!');
+            // UI 숨기기
+            const uiOverlay = document.getElementById('ui-overlay');
+            if (uiOverlay) {
+                uiOverlay.style.display = 'none';
             }
 
-            console.log('🔍 VR 지원 확인 중...');
-            const isSupported = await this.game.checkVRSupport();
-            console.log('VR 지원 상태:', isSupported);
-
-            if (!isSupported) {
-                throw new Error('이 디바이스/브라우저에서는 VR이 지원되지 않습니다.');
-            }
-
-            console.log('🚀 VR 모드 시작 시도...');
-            await this.game.startVR();
-            console.log('✅ VR 모드 시작 성공!');
-            
-            // VR 가이드 표시
-            const vrGuide = document.getElementById('vr-guide');
-            const fpsGuide = document.getElementById('fps-guide');
-            if (vrGuide && fpsGuide) {
-                vrGuide.style.display = 'block';
-                fpsGuide.style.display = 'none';
-            }
         } catch (error) {
             console.error('❌ VR 모드 시작 실패:', error);
-            console.error('❌ 에러 상세:', {
-                name: error instanceof Error ? error.name : 'Unknown',
-                message: error instanceof Error ? error.message : String(error),
-                stack: error instanceof Error ? error.stack : 'No stack trace'
-            });
             
+            // 버튼 복원
             const vrButton = document.getElementById('vr-button') as HTMLButtonElement;
             vrButton.disabled = false;
             vrButton.textContent = 'VR 모드 시작';
             
-            // Reference Space 에러 특별 처리
-            if (error instanceof Error && error.message.includes('requestReferenceSpace')) {
-                console.log('🚨 Reference Space 에러 감지 - 사용자 안내 표시');
-                const vrErrorGuide = document.getElementById('vr-error-guide');
-                if (vrErrorGuide) {
-                    vrErrorGuide.style.display = 'block';
-                }
-            } else {
-                // 일반적인 에러 메시지 표시
-                const errorMessage = error instanceof Error ? error.message : 'VR 모드를 시작할 수 없습니다.';
-                alert(`VR 모드 실패: ${errorMessage}\n\n2D 모드로 계속 진행합니다.\n\n디버그 콘솔(D키)에서 자세한 정보를 확인하세요.`);
-            }
+            // 에러 표시
+            this.showError(error as Error);
         }
     }
 
@@ -291,8 +304,8 @@ class QuestEscapeVR {
             console.log('💪 컨트롤러 강제 활성화 시작...');
             
             // VR 세션이 활성화되어 있는지 확인
-            const renderer = (this.game as any).renderer;
-            if (!renderer || !renderer.xr || !renderer.xr.isPresenting) {
+            const xrHelper = this.game.getXRHelper();
+            if (!xrHelper || !this.game.isInVRMode()) {
                 console.warn('⚠️ VR 모드가 활성화되지 않았습니다. 먼저 VR 모드를 시작해주세요.');
                 return;
             }
@@ -305,41 +318,41 @@ class QuestEscapeVR {
             for (let i = 0; i < gamepads.length; i++) {
                 const gamepad = gamepads[i];
                 if (gamepad && gamepad.connected) {
-                    foundController = true;
-                    console.log(`🎮 컨트롤러 ${i} 발견:`, {
+                    console.log(`🎮 게임패드 ${i} 발견:`, {
                         id: gamepad.id,
                         mapping: gamepad.mapping,
-                        axes: gamepad.axes.length,
                         buttons: gamepad.buttons.length,
-                        connected: gamepad.connected,
-                        timestamp: gamepad.timestamp
+                        axes: gamepad.axes.length,
+                        connected: gamepad.connected
                     });
+                    foundController = true;
 
-                    // 컨트롤러 진동 시도 (활성화 용도)
-                    if (gamepad.vibrationActuator) {
-                        try {
-                            await gamepad.vibrationActuator.playEffect('dual-rumble', {
-                                duration: 300,
-                                strongMagnitude: 0.7,
-                                weakMagnitude: 0.3
-                            });
-                            console.log('✅ 컨트롤러 진동 성공');
-                        } catch (e) {
-                            console.log('진동 실패:', e);
+                    // 컨트롤러가 Quest 계열인지 확인
+                    if (gamepad.id.toLowerCase().includes('oculus') || 
+                        gamepad.id.toLowerCase().includes('meta') ||
+                        gamepad.id.toLowerCase().includes('quest')) {
+                        console.log('✅ 메타 퀘스트 컨트롤러 확인됨!');
+                        
+                        // 진동 테스트
+                        if (gamepad.vibrationActuator) {
+                            try {
+                                await gamepad.vibrationActuator.playEffect('dual-rumble', {
+                                    duration: 200,
+                                    strongMagnitude: 0.5,
+                                    weakMagnitude: 0.3
+                                });
+                                console.log('✅ 컨트롤러 진동 테스트 성공');
+                            } catch (vibError) {
+                                console.log('⚠️ 진동 테스트 실패:', vibError);
+                            }
                         }
                     }
                 }
             }
 
             if (!foundController) {
-                console.warn('⚠️ 연결된 게임 컨트롤러를 찾을 수 없습니다.');
-                console.log('📝 메타 퀘스트3 컨트롤러 해결 방법:');
-                console.log('1. 컨트롤러 전원을 다시 켜주세요 (Meta 버튼 길게 누르기)');
-                console.log('2. Quest 설정 > 디바이스 > 컨트롤러에서 재페어링');
-                console.log('3. 브라우저 새로고침 후 VR 모드 재시작');
-                console.log('4. Quest 재시작 후 재시도');
-            } else {
-                console.log('✅ 컨트롤러 발견! 이제 조이스틱을 움직여보세요.');
+                console.warn('⚠️ 연결된 게임패드를 찾을 수 없습니다.');
+                console.log('💡 컨트롤러를 흔들어보거나 버튼을 눌러보세요.');
             }
 
         } catch (error) {
@@ -348,52 +361,66 @@ class QuestEscapeVR {
     }
 
     private showControls(): void {
-        console.log(`
-🎮 Quest Escape VR - 조작 방법:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🖱️ 마우스 모드:
-• 마우스 이동: 오브젝트 하이라이트
-• 클릭: FPS 모드 활성화 또는 오브젝트 상호작용
-• H: 힌트 보기
-
-🎯 FPS 모드 (포인터 락):
-• WASD: 이동
-• 마우스: 시점 회전
-• 클릭: 중앙 크로스헤어로 상호작용
-• P: 비밀번호 입력
-• ESC: FPS 모드 해제
-
-🎲 게임 목표:
-• 황금 큐브 수집 (+100점)
-• 터미널에서 비밀번호 입력 (+200점)
-• 총 300점으로 게임 완료!
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        `);
+        console.log('🎮 컨트롤 방법:');
+        console.log('  - WASD: 이동');
+        console.log('  - 마우스: 시점 변경');
+        console.log('  - E: 상호작용');
+        console.log('  - Space: 점프');
+        console.log('  - Shift: 달리기');
+        console.log('  - Tab: 인벤토리');
+        console.log('  - D: 디버그 콘솔 토글');
+        console.log('🥽 VR 모드:');
+        console.log('  - 왼손 조이스틱: 이동');
+        console.log('  - 오른손 조이스틱: 회전');
+        console.log('  - 트리거: 선택/상호작용');
+        console.log('  - 그립: 잡기');
     }
 
     private showError(error: Error): void {
-        const loadingDiv = document.getElementById('loading');
-        if (loadingDiv) {
-            loadingDiv.innerHTML = `
-                <h1>❌ 오류 발생</h1>
-                <p>${error.message}</p>
-                <button onclick="location.reload()" style="
-                    padding: 10px 20px;
-                    background: #ff6b6b;
-                    color: white;
-                    border: none;
-                    border-radius: 5px;
-                    cursor: pointer;
-                ">다시 시도</button>
-            `;
-        }
+        const errorDiv = document.createElement('div');
+        errorDiv.id = 'error-message';
+        errorDiv.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 0, 0, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 10000;
+            max-width: 500px;
+            text-align: center;
+            font-family: monospace;
+        `;
+        
+        errorDiv.innerHTML = `
+            <h3>❌ 오류 발생</h3>
+            <p>${error.message}</p>
+            <button onclick="location.reload()" style="
+                background: rgba(255, 255, 255, 0.2);
+                color: white;
+                border: 1px solid white;
+                padding: 10px 20px;
+                border-radius: 5px;
+                cursor: pointer;
+                margin-top: 10px;
+            ">페이지 새로고침</button>
+        `;
+        
+        document.body.appendChild(errorDiv);
+        
+        // 5초 후 자동 제거
+        setTimeout(() => {
+            if (errorDiv.parentNode) {
+                errorDiv.parentNode.removeChild(errorDiv);
+            }
+        }, 5000);
     }
 }
 
 // 게임 시작
-window.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('🚀 Quest Escape VR 시작...');
     new QuestEscapeVR();
-});
-
-// 전역으로 내보내기 (디버깅용)
-(window as any).QuestEscapeVR = QuestEscapeVR; 
+}); 

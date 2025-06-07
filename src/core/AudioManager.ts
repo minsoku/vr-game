@@ -1,4 +1,5 @@
 export class AudioManager {
+    private game: any;
     private audioContext: AudioContext | null = null;
     private backgroundMusic: HTMLAudioElement | null = null;
     private soundEffects: Map<string, HTMLAudioElement> = new Map();
@@ -11,7 +12,8 @@ export class AudioManager {
     // 음소거 상태
     private isMuted: boolean = false;
 
-    constructor() {
+    constructor(game: any) {
+        this.game = game;
         this.initAudioContext();
         this.loadSounds();
     }
