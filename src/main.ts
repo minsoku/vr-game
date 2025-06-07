@@ -181,6 +181,9 @@ class QuestEscapeVR {
 
         // 키보드 컨트롤 안내 (2D 모드용)
         this.showControls();
+
+        // 컨트롤러 강제 활성화 버튼 설정
+        this.setupControllerActivateButton();
     }
 
     private async startVRMode(): Promise<void> {
@@ -250,6 +253,88 @@ class QuestEscapeVR {
             // 더 자세한 에러 메시지 표시
             const errorMessage = error instanceof Error ? error.message : 'VR 모드를 시작할 수 없습니다.';
             alert(`VR 모드 실패: ${errorMessage}\n\n2D 모드로 계속 진행합니다.\n\n디버그 콘솔(D키)에서 자세한 정보를 확인하세요.`);
+        }
+    }
+
+    private setupControllerActivateButton(): void {
+        const controllerBtn = document.getElementById('controller-activate-btn');
+        if (controllerBtn) {
+            const handleActivate = () => {
+                console.log('🎮 컨트롤러 강제 활성화 시도...');
+                this.forceActivateControllers();
+            };
+
+            controllerBtn.addEventListener('click', handleActivate);
+            controllerBtn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                handleActivate();
+            });
+        }
+    }
+
+    private async forceActivateControllers(): Promise<void> {
+        if (!this.game) {
+            console.error('❌ 게임 인스턴스가 없습니다.');
+            return;
+        }
+
+        try {
+            console.log('💪 컨트롤러 강제 활성화 시작...');
+            
+            // VR 세션이 활성화되어 있는지 확인
+            const renderer = (this.game as any).renderer;
+            if (!renderer || !renderer.xr || !renderer.xr.isPresenting) {
+                console.warn('⚠️ VR 모드가 활성화되지 않았습니다. 먼저 VR 모드를 시작해주세요.');
+                return;
+            }
+
+            // 직접 Gamepad API로 컨트롤러 검색
+            console.log('🔍 Gamepad API로 컨트롤러 검색...');
+            const gamepads = navigator.getGamepads();
+            let foundController = false;
+
+            for (let i = 0; i < gamepads.length; i++) {
+                const gamepad = gamepads[i];
+                if (gamepad && gamepad.connected) {
+                    foundController = true;
+                    console.log(`🎮 컨트롤러 ${i} 발견:`, {
+                        id: gamepad.id,
+                        mapping: gamepad.mapping,
+                        axes: gamepad.axes.length,
+                        buttons: gamepad.buttons.length,
+                        connected: gamepad.connected,
+                        timestamp: gamepad.timestamp
+                    });
+
+                    // 컨트롤러 진동 시도 (활성화 용도)
+                    if (gamepad.vibrationActuator) {
+                        try {
+                            await gamepad.vibrationActuator.playEffect('dual-rumble', {
+                                duration: 300,
+                                strongMagnitude: 0.7,
+                                weakMagnitude: 0.3
+                            });
+                            console.log('✅ 컨트롤러 진동 성공');
+                        } catch (e) {
+                            console.log('진동 실패:', e);
+                        }
+                    }
+                }
+            }
+
+            if (!foundController) {
+                console.warn('⚠️ 연결된 게임 컨트롤러를 찾을 수 없습니다.');
+                console.log('📝 메타 퀘스트3 컨트롤러 해결 방법:');
+                console.log('1. 컨트롤러 전원을 다시 켜주세요 (Meta 버튼 길게 누르기)');
+                console.log('2. Quest 설정 > 디바이스 > 컨트롤러에서 재페어링');
+                console.log('3. 브라우저 새로고침 후 VR 모드 재시작');
+                console.log('4. Quest 재시작 후 재시도');
+            } else {
+                console.log('✅ 컨트롤러 발견! 이제 조이스틱을 움직여보세요.');
+            }
+
+        } catch (error) {
+            console.error('❌ 컨트롤러 활성화 실패:', error);
         }
     }
 
