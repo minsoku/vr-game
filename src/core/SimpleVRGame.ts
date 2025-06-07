@@ -695,11 +695,61 @@ export class SimpleVRGame {
     }
 
     public async checkVRSupport(): Promise<boolean> {
-        return false; // 지금은 2D 모드만
+        console.log('🔍 VR 지원 확인 시작');
+        
+        if (!('xr' in navigator)) {
+            console.error('❌ navigator.xr이 존재하지 않습니다');
+            console.log('- 가능한 원인: 비보안 연결(HTTP), 구형 브라우저, WebXR 미지원');
+            return false;
+        }
+
+        try {
+            const xr = (navigator as any).xr;
+            console.log('✅ navigator.xr 존재');
+            console.log('- XR 객체 타입:', typeof xr);
+            console.log('- isSessionSupported 메서드:', typeof xr.isSessionSupported);
+
+            if (typeof xr.isSessionSupported !== 'function') {
+                console.error('❌ isSessionSupported 메서드가 함수가 아닙니다');
+                return false;
+            }
+
+            console.log('🔍 immersive-vr 세션 지원 확인 중...');
+            const isSupported = await xr.isSessionSupported('immersive-vr');
+            console.log('✅ VR 세션 지원 상태:', isSupported);
+            
+            if (!isSupported) {
+                console.warn('❌ immersive-vr 세션이 지원되지 않습니다');
+                console.log('- 가능한 원인: VR 헤드셋 미연결, 드라이버 문제, 브라우저 설정');
+            }
+            
+            return isSupported;
+        } catch (e) {
+            console.error('❌ VR 지원 확인 중 오류:', e);
+            console.error('- 에러 이름:', e instanceof Error ? e.name : 'Unknown');
+            console.error('- 에러 메시지:', e instanceof Error ? e.message : String(e));
+            return false;
+        }
     }
 
     public async startVR(): Promise<void> {
-        throw new Error('VR 모드는 아직 지원되지 않습니다.');
+        // WebXR 활성화
+        this.renderer.xr.enabled = true;
+        
+        try {
+            const session = await (navigator as any).xr.requestSession('immersive-vr', {
+                optionalFeatures: ['hand-tracking', 'layers']
+            });
+            
+            await this.renderer.xr.setSession(session);
+            console.log('🥽 VR 모드 활성화');
+            
+            // VR 애니메이션 루프로 전환
+            this.renderer.setAnimationLoop(() => this.animate());
+        } catch (error) {
+            console.error('VR 세션 시작 실패:', error);
+            throw error;
+        }
     }
 
     public dispose(): void {

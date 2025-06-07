@@ -40,7 +40,13 @@ export class InputManager {
         const controller = event.target;
         
         // 레이캐스팅을 통한 오브젝트 감지
-        this.raycaster.setFromXRController(controller);
+        // VR 컨트롤러의 위치와 방향을 이용해 레이캐스팅 설정
+        const tempMatrix = new THREE.Matrix4();
+        tempMatrix.identity().extractRotation(controller.matrixWorld);
+        
+        this.raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+        this.raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+        
         const intersects = this.raycaster.intersectObjects(this.game.scene.children, true);
         
         if (intersects.length > 0) {
