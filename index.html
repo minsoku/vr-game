@@ -190,27 +190,55 @@
         position: fixed;
         bottom: 10px;
         left: 10px;
-        width: 300px;
-        height: 200px;
-        background: rgba(0, 0, 0, 0.8);
+        width: 350px;
+        height: 250px;
+        background: rgba(0, 0, 0, 0.9);
         color: white;
-        padding: 10px;
-        border-radius: 5px;
-        font-size: 12px;
+        padding: 15px;
+        border-radius: 8px;
+        border: 2px solid #00ff00;
+        font-size: 14px;
         font-family: monospace;
         overflow-y: auto;
         z-index: 1001;
         display: none;
+        box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
       "
     >
       <div
         id="debug-header"
         style="color: #00ff00; margin-bottom: 5px; font-weight: bold"
       >
-        🔍 VR 디버그 콘솔 (D키로 토글)
+        🔍 VR 디버그 콘솔 (우측 하단 🐛 터치)
       </div>
       <div id="debug-messages"></div>
     </div>
+
+    <!-- VR 디버그 토글 버튼 (메타 퀘스트용) -->
+    <button
+      id="debug-toggle-btn"
+      style="
+        position: fixed;
+        bottom: 20px;
+        right: 80px;
+        width: 50px;
+        height: 50px;
+        background: rgba(0, 0, 0, 0.7);
+        border: 2px solid #00ff00;
+        border-radius: 50%;
+        color: #00ff00;
+        font-size: 20px;
+        cursor: pointer;
+        z-index: 1002;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+      "
+      title="디버그 콘솔 토글 (메타 퀘스트용)"
+    >
+      🐛
+    </button>
 
     <!-- 숫자 키패드 UI -->
     <div

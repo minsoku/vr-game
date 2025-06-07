@@ -37,11 +37,26 @@ class DebugConsole {
     }
 
     private setupKeyToggle(): void {
+        // 키보드 토글 (PC용)
         document.addEventListener('keydown', (event) => {
             if (event.key === 'd' || event.key === 'D') {
                 this.toggle();
             }
         });
+
+        // 버튼 토글 (VR/모바일용)
+        const toggleBtn = document.getElementById('debug-toggle-btn');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', () => {
+                this.toggle();
+            });
+            
+            // 터치 이벤트도 추가 (VR 컨트롤러 호환성)
+            toggleBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                this.toggle();
+            });
+        }
     }
 
     private addMessage(type: string, message: string, color: string): void {
@@ -73,9 +88,20 @@ class DebugConsole {
     public toggle(): void {
         this.isVisible = !this.isVisible;
         const debugConsole = document.getElementById('debug-console');
+        const toggleBtn = document.getElementById('debug-toggle-btn');
+        
         if (debugConsole) {
             debugConsole.style.display = this.isVisible ? 'block' : 'none';
         }
+        
+        // 버튼 스타일 업데이트
+        if (toggleBtn) {
+            toggleBtn.style.background = this.isVisible 
+                ? 'rgba(0, 255, 0, 0.3)' 
+                : 'rgba(0, 0, 0, 0.7)';
+            toggleBtn.style.borderColor = this.isVisible ? '#00ff00' : '#00ff00';
+        }
+        
         console.log(`디버그 콘솔 ${this.isVisible ? '활성화' : '비활성화'}`);
     }
 
