@@ -137,7 +137,15 @@ class QuestEscapeVR {
                 if (!supported) {
                     vrButton.textContent = '2D 모드로 플레이';
                     vrButton.title = 'VR이 지원되지 않아 2D 모드로 실행됩니다';
+                    console.log('❌ VR 지원되지 않음 - 2D 모드로 설정');
+                } else {
+                    console.log('✅ VR 지원됨 - VR 버튼 활성화');
+                    vrButton.title = '메타 퀘스트에서 VR 모드로 체험하세요';
                 }
+            }).catch((error) => {
+                console.error('❌ VR 지원 확인 중 오류:', error);
+                vrButton.textContent = '2D 모드로 플레이';
+                vrButton.title = 'VR 확인 실패 - 2D 모드로 실행됩니다';
             });
         }
 

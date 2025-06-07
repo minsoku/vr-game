@@ -737,17 +737,56 @@ export class SimpleVRGame {
         this.renderer.xr.enabled = true;
         
         try {
-            const session = await (navigator as any).xr.requestSession('immersive-vr', {
-                optionalFeatures: ['hand-tracking', 'layers']
+            console.log('🚀 VR 세션 요청 중...');
+            
+            // 메타 퀘스트3 호환 설정 - requiredFeatures를 제거하고 optionalFeatures만 사용
+            const sessionInit = {
+                optionalFeatures: [
+                    'local-floor',  // 바닥 기준 추적 (메타 퀘스트 선호)
+                    'local',        // 기본 위치 추적
+                    'hand-tracking', // 핸드 트래킹 (선택적)
+                    'layers'        // 레이어 지원 (선택적)
+                ]
+            };
+            
+            console.log('📋 세션 설정:', sessionInit);
+            
+            const session = await (navigator as any).xr.requestSession('immersive-vr', sessionInit);
+            
+            console.log('✅ VR 세션 생성 완료');
+            console.log('📍 세션 정보:');
+            console.log('- inputSources:', session.inputSources?.length || 0);
+            console.log('- environmentBlendMode:', session.environmentBlendMode);
+            console.log('- interactionMode:', session.interactionMode);
+            
+            // Three.js에 세션 설정 (Three.js가 reference space를 자동 관리)
+            console.log('🔄 Three.js WebXR 세션 설정 중...');
+            await this.renderer.xr.setSession(session);
+            console.log('🥽 VR 모드 활성화 완료');
+            
+            // VR 세션 이벤트 리스너
+            session.addEventListener('end', () => {
+                console.log('🔚 VR 세션 종료됨');
+                this.renderer.setAnimationLoop(null);
             });
             
-            await this.renderer.xr.setSession(session);
-            console.log('🥽 VR 모드 활성화');
-            
             // VR 애니메이션 루프로 전환
+            console.log('🔄 VR 애니메이션 루프 시작');
             this.renderer.setAnimationLoop(() => this.animate());
+            
         } catch (error) {
-            console.error('VR 세션 시작 실패:', error);
+            console.error('❌ VR 세션 시작 실패:', error);
+            console.error('- 에러 타입:', error.constructor?.name || 'Unknown');
+            console.error('- 에러 메시지:', error.message || String(error));
+            console.error('- 전체 에러:', error);
+            
+            // 더 구체적인 에러 정보
+            if (error.name === 'NotSupportedError') {
+                console.error('🔍 NotSupportedError 상세 분석:');
+                console.error('- 이 에러는 보통 reference space 문제입니다');
+                console.error('- 메타 퀘스트3에서 지원하지 않는 기능을 요청했을 가능성');
+            }
+            
             throw error;
         }
     }
