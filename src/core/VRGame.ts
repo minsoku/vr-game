@@ -59,8 +59,8 @@ export class VRGame {
         // 씬 생성
         this.scene = new BABYLON.Scene(this.engine);
         
-        // 카메라 생성
-        this.camera = new BABYLON.FreeCamera("camera", new BABYLON.Vector3(0, 1.6, -5), this.scene);
+        // 카메라 생성 (하우스를 잘 볼 수 있는 위치)
+        this.camera = new BABYLON.FreeCamera("camera", new BABYLON.Vector3(0, 3, -10), this.scene);
         this.camera.setTarget(BABYLON.Vector3.Zero());
         
         // 카메라 컨트롤 설정 (안전한 방법)
@@ -136,8 +136,8 @@ export class VRGame {
         this.gameState = new GameStateManager(this);
         this.audioManager = new AudioManager(this);
 
-        // 기본 방 로드
-        this.sceneManager.loadRoom('library');
+        // 기본 방 로드 (house로 변경)
+        this.sceneManager.loadRoom('house');
 
         console.log('✅ 게임 매니저 초기화 완료');
     }
