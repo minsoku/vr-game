@@ -44,6 +44,13 @@ export class SimpleVRGame {
     
     // VR 컨트롤러
     private vrController: VRController | null = null;
+    
+    // VR 이동 시스템 (직접 구현)
+    private vrMoveSpeed: number = 3.0;
+    private vrControllers: THREE.Group[] = [];
+    private vrGamepads: (Gamepad | null)[] = [null, null];
+    private vrTurnCooldown: number = 0;
+    private vrDebugCounter: number = 0; // 디버그 로그 제한용
 
     constructor() {
         this.scene = new THREE.Scene();
@@ -517,8 +524,8 @@ export class SimpleVRGame {
         this.animationId = requestAnimationFrame(() => this.animate());
         
         // VR 컨트롤러 업데이트 (VR 모드일 때)
-        if (this.vrController && this.renderer.xr.isPresenting) {
-            this.vrController.update();
+        if (this.renderer.xr.isPresenting) {
+            this.updateVRMovement();
         }
         
         // FPS 스타일 이동 처리 (2D 모드일 때)
@@ -775,7 +782,7 @@ export class SimpleVRGame {
             
             // VR 컨트롤러 초기화
             console.log('🎮 VR 컨트롤러 초기화 중...');
-            this.vrController = new VRController(this);
+            this.setupVRControllers();
             console.log('✅ VR 컨트롤러 준비 완료');
             
             // VR 세션 이벤트 리스너
@@ -806,6 +813,153 @@ export class SimpleVRGame {
             }
             
             throw error;
+        }
+    }
+
+    private setupVRControllers(): void {
+        console.log('🎮 기본 VR 컨트롤러 설정 시작');
+        
+        // 컨트롤러 0 (왼손)
+        const controller0 = this.renderer.xr.getController(0);
+        controller0.addEventListener('connected', (event) => {
+            console.log('🎮 왼손 컨트롤러 연결됨:', event.data);
+            this.vrGamepads[0] = event.data.gamepad;
+        });
+        controller0.addEventListener('disconnected', () => {
+            console.log('🎮 왼손 컨트롤러 연결 해제됨');
+            this.vrGamepads[0] = null;
+        });
+        this.scene.add(controller0);
+        this.vrControllers[0] = controller0;
+
+        // 컨트롤러 1 (오른손)
+        const controller1 = this.renderer.xr.getController(1);
+        controller1.addEventListener('connected', (event) => {
+            console.log('🎮 오른손 컨트롤러 연결됨:', event.data);
+            this.vrGamepads[1] = event.data.gamepad;
+        });
+        controller1.addEventListener('disconnected', () => {
+            console.log('🎮 오른손 컨트롤러 연결 해제됨');
+            this.vrGamepads[1] = null;
+        });
+        this.scene.add(controller1);
+        this.vrControllers[1] = controller1;
+        
+        console.log('✅ VR 컨트롤러 이벤트 리스너 설정 완료');
+    }
+
+    private updateVRMovement(): void {
+        const session = this.renderer.xr.getSession();
+        if (!session || !session.inputSources) {
+            // 60프레임마다 한 번 로그 (1초마다)
+            if (this.vrDebugCounter % 60 === 0) {
+                console.log('❌ VR 세션 또는 입력 소스가 없습니다');
+            }
+            this.vrDebugCounter++;
+            return;
+        }
+
+        // 컨트롤러 개수 확인
+        if (this.vrDebugCounter % 120 === 0) { // 2초마다 한 번
+            console.log(`🎮 활성 컨트롤러 수: ${session.inputSources.length}`);
+        }
+
+        // 모든 입력 소스 확인
+        for (let i = 0; i < session.inputSources.length; i++) {
+            const inputSource = session.inputSources[i];
+            const gamepad = inputSource.gamepad;
+            
+            if (gamepad && gamepad.axes && gamepad.axes.length >= 2) {
+                // 60프레임마다 한 번 로그 (1초마다)
+                if (this.vrDebugCounter % 60 === 0) {
+                    console.log(`🎮 컨트롤러 ${i} (${inputSource.handedness}):`, {
+                        axes: gamepad.axes.slice(0, 4).map(axis => axis.toFixed(2)),
+                        hasButtons: gamepad.buttons?.length || 0
+                    });
+                }
+                
+                // 왼손 컨트롤러 (이동)
+                if (inputSource.handedness === 'left' || i === 0) {
+                    this.processVRMovement(gamepad, inputSource.handedness || 'left');
+                }
+                
+                // 오른손 컨트롤러 (회전)
+                if (inputSource.handedness === 'right' || i === 1) {
+                    this.processVRRotation(gamepad, inputSource.handedness || 'right');
+                }
+            }
+        }
+        
+        // 회전 쿨다운 감소
+        if (this.vrTurnCooldown > 0) {
+            this.vrTurnCooldown--;
+        }
+        
+        this.vrDebugCounter++;
+    }
+
+    private processVRMovement(gamepad: Gamepad, handedness: string): void {
+        if (!gamepad.axes || gamepad.axes.length < 2) return;
+        
+        const moveX = gamepad.axes[0]; // 좌우
+        const moveZ = gamepad.axes[1]; // 앞뒤
+        const deadzone = 0.15; // 데드존 낮춤
+        
+        if (Math.abs(moveX) > deadzone || Math.abs(moveZ) > deadzone) {
+            // 30프레임마다 한 번 로그 (0.5초마다)
+            if (this.vrDebugCounter % 30 === 0) {
+                console.log(`🚶 ${handedness} 이동: X=${moveX.toFixed(2)}, Z=${moveZ.toFixed(2)}`);
+            }
+            
+            // 카메라 기준 이동 방향 계산
+            const cameraDirection = new THREE.Vector3();
+            this.camera.getWorldDirection(cameraDirection);
+            
+            // Y축 제거 (수평 이동만)
+            const forward = new THREE.Vector3(cameraDirection.x, 0, cameraDirection.z).normalize();
+            const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+            
+            // 이동 벡터 계산
+            const moveVector = new THREE.Vector3();
+            moveVector.addScaledVector(forward, -moveZ); // 앞뒤 (Z축 반전)
+            moveVector.addScaledVector(right, moveX); // 좌우
+            
+            // 이동 적용
+            const deltaTime = 1/60; // 60fps 가정
+            const moveAmount = moveVector.multiplyScalar(this.vrMoveSpeed * deltaTime);
+            
+            this.camera.position.add(moveAmount);
+            
+            // 경계 제한
+            this.camera.position.x = Math.max(-8, Math.min(8, this.camera.position.x));
+            this.camera.position.z = Math.max(-8, Math.min(8, this.camera.position.z));
+            this.camera.position.y = Math.max(1.6, this.camera.position.y);
+            
+            // 위치 로그 (60프레임마다)
+            if (this.vrDebugCounter % 60 === 0) {
+                console.log(`📍 카메라 위치: ${this.camera.position.x.toFixed(2)}, ${this.camera.position.y.toFixed(2)}, ${this.camera.position.z.toFixed(2)}`);
+            }
+        }
+    }
+
+    private processVRRotation(gamepad: Gamepad, handedness: string): void {
+        if (!gamepad.axes || gamepad.axes.length < 4) return;
+        
+        const turnX = gamepad.axes[2]; // 오른쪽 조이스틱 X축
+        const deadzone = 0.6; // 데드존 낮춤
+        
+        if (this.vrTurnCooldown <= 0) {
+            if (turnX > deadzone) {
+                // 오른쪽 회전
+                this.camera.rotation.y -= Math.PI / 6; // 30도
+                this.vrTurnCooldown = 30; // 0.5초 쿨다운
+                console.log('↻ 오른쪽 회전 (30도)');
+            } else if (turnX < -deadzone) {
+                // 왼쪽 회전
+                this.camera.rotation.y += Math.PI / 6; // 30도
+                this.vrTurnCooldown = 30; // 0.5초 쿨다운
+                console.log('↺ 왼쪽 회전 (30도)');
+            }
         }
     }
 
