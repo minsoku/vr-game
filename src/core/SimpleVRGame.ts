@@ -760,19 +760,26 @@ export class SimpleVRGame {
                 attempts++;
                 console.log(`🔍 컨트롤러 검색 시도 ${attempts}/${maxAttempts}...`);
                 
-                // 1. 직접 Gamepad API 확인
+                // 1. 직접 Gamepad API 확인 (중복 제거)
                 const gamepads = navigator.getGamepads();
                 console.log(`🎮 현재 게임패드 상태: ${gamepads.length}개 슬롯`);
                 
+                const validControllers = [];
+                const seenIds = new Set();
+                
                 for (let i = 0; i < gamepads.length; i++) {
                     const gamepad = gamepads[i];
-                    if (gamepad && gamepad.connected) {
+                    if (gamepad && gamepad.connected && !seenIds.has(gamepad.id)) {
+                        seenIds.add(gamepad.id);
+                        validControllers.push({index: i, gamepad});
                         controllerFound = true;
-                        console.log(`✅ 컨트롤러 ${i} 발견!`, {
+                        
+                        console.log(`✅ 유효한 컨트롤러 ${validControllers.length} (슬롯 ${i}):`, {
                             id: gamepad.id,
                             buttons: gamepad.buttons.length,
                             axes: gamepad.axes.length,
-                            timestamp: gamepad.timestamp
+                            timestamp: gamepad.timestamp,
+                            mapping: gamepad.mapping
                         });
                         
                         // 메타 퀘스트 컨트롤러 확인
@@ -1037,15 +1044,17 @@ export class SimpleVRGame {
             
             console.log('🚀 VR 세션 요청 중...');
             
-            // 메타 퀘스트3 호환 설정 - requiredFeatures를 제거하고 optionalFeatures만 사용
+            // 메타 퀘스트3 호환 설정 - 더 안전한 설정
             const sessionInit = {
                 optionalFeatures: [
                     'local-floor',  // 바닥 기준 추적 (메타 퀘스트 선호)
-                    'local',        // 기본 위치 추적
-                    'hand-tracking', // 핸드 트래킹 (선택적)
-                    'layers'        // 레이어 지원 (선택적)
+                    'local'         // 기본 위치 추적만 (안정성 우선)
+                    // hand-tracking, layers 제거 (충돌 방지)
                 ]
             };
+            
+            console.log('⚠️ 안전 모드: hand-tracking과 layers 기능 비활성화');
+            console.log('🎯 컨트롤러 입력에만 집중하여 안정성 확보');
             
             console.log('📋 세션 설정:', sessionInit);
             
@@ -1109,11 +1118,12 @@ export class SimpleVRGame {
     private setupVRControllers(): void {
         console.log('🎮 기본 VR 컨트롤러 설정 시작');
         
-        // 컨트롤러 0 (왼손)
+        // 컨트롤러 0 (왼손) - 강화된 이벤트 처리
         const controller0 = this.renderer.xr.getController(0);
         controller0.addEventListener('connected', (event) => {
             console.log('🎮 왼손 컨트롤러 연결됨:', event.data);
             this.vrGamepads[0] = event.data.gamepad;
+            this.setupControllerEvents(controller0, 0, 'left');
         });
         controller0.addEventListener('disconnected', () => {
             console.log('🎮 왼손 컨트롤러 연결 해제됨');
@@ -1122,11 +1132,12 @@ export class SimpleVRGame {
         this.scene.add(controller0);
         this.vrControllers[0] = controller0;
 
-        // 컨트롤러 1 (오른손)
+        // 컨트롤러 1 (오른손) - 강화된 이벤트 처리
         const controller1 = this.renderer.xr.getController(1);
         controller1.addEventListener('connected', (event) => {
             console.log('🎮 오른손 컨트롤러 연결됨:', event.data);
             this.vrGamepads[1] = event.data.gamepad;
+            this.setupControllerEvents(controller1, 1, 'right');
         });
         controller1.addEventListener('disconnected', () => {
             console.log('🎮 오른손 컨트롤러 연결 해제됨');
@@ -1139,6 +1150,63 @@ export class SimpleVRGame {
         this.createVR3DButtons();
         
         console.log('✅ VR 컨트롤러 이벤트 리스너 설정 완료');
+    }
+
+    private setupControllerEvents(controller: THREE.Group, index: number, handedness: string): void {
+        console.log(`🔧 ${handedness} 컨트롤러 이벤트 설정 시작...`);
+        
+        // 모든 이벤트 리스너 추가
+        const events = ['selectstart', 'selectend', 'select', 'squeezestart', 'squeezeend', 'squeeze'];
+        
+        events.forEach(eventName => {
+            controller.addEventListener(eventName, (event) => {
+                console.log(`🔴 ${handedness} 컨트롤러 이벤트: ${eventName}`, event);
+                this.handleControllerEvent(eventName, handedness, event);
+            });
+        });
+        
+        console.log(`✅ ${handedness} 컨트롤러 이벤트 리스너 ${events.length}개 등록 완료`);
+    }
+
+    private handleControllerEvent(eventName: string, handedness: string, event: any): void {
+        console.log(`🎯 컨트롤러 입력 처리: ${eventName} (${handedness})`);
+        
+        switch (eventName) {
+            case 'selectstart':
+            case 'select':
+                console.log(`🔴 ${handedness} A 버튼/트리거 누름`);
+                // VR 3D 버튼 클릭 확인
+                if (event.target) {
+                    this.checkVRButtonInteraction({handedness, target: event.target});
+                }
+                // 이동 테스트
+                this.testVRMovement(handedness, 'forward');
+                break;
+                
+            case 'squeezestart':
+            case 'squeeze':
+                console.log(`🤏 ${handedness} 그립 버튼 누름`);
+                this.testVRMovement(handedness, 'backward');
+                break;
+        }
+    }
+
+    private testVRMovement(handedness: string, direction: string): void {
+        console.log(`🚶 ${handedness} 컨트롤러로 ${direction} 이동 테스트`);
+        
+        const moveDistance = 0.1;
+        const camera = this.camera;
+        
+        switch (direction) {
+            case 'forward':
+                camera.position.z -= moveDistance;
+                console.log(`➡️ 앞으로 이동: ${camera.position.z.toFixed(2)}`);
+                break;
+            case 'backward':
+                camera.position.z += moveDistance;
+                console.log(`⬅️ 뒤로 이동: ${camera.position.z.toFixed(2)}`);
+                break;
+        }
     }
 
     private createVR3DButtons(): void {
