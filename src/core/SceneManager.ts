@@ -74,6 +74,9 @@ export class SceneManager {
             // 파티클 효과 추가
             this.createParticleEffects();
 
+            // 방탈출 퍼즐 시스템 추가
+            this.createEscapeRoomPuzzle();
+
             console.log('✨ 불빛 분위기 환경 생성 완료!');
 
         } catch (error) {
@@ -257,6 +260,364 @@ export class SceneManager {
         dustParticles.start();
 
         console.log('✅ 파티클 효과 생성 완료');
+    }
+
+    private createEscapeRoomPuzzle(): void {
+        console.log('🔐 방탈출 퍼즐 시스템 생성 중...');
+        
+        // 오르골 생성
+        this.createMusicBox();
+        
+        // 힌트 패널 생성
+        this.createHintPanel();
+        
+        // 자물쇠 시스템 생성
+        this.createLockSystem();
+        
+        console.log('✅ 방탈출 퍼즐 시스템 생성 완료');
+    }
+
+    private createMusicBox(): void {
+        console.log('🎵 오르골 생성 중...');
+        
+        // 오르골 베이스
+        const musicBox = BABYLON.MeshBuilder.CreateBox("musicBox", {
+            width: 2,
+            height: 0.5,
+            depth: 1.5
+        }, this.game.scene);
+        musicBox.position = new BABYLON.Vector3(-5, 1, 0);
+        
+        // 오르골 머티리얼
+        const musicBoxMaterial = new BABYLON.StandardMaterial("musicBoxMaterial", this.game.scene);
+        musicBoxMaterial.diffuseColor = new BABYLON.Color3(0.4, 0.2, 0.1); // 갈색 나무
+        musicBoxMaterial.specularColor = new BABYLON.Color3(0.2, 0.1, 0.05);
+        musicBox.material = musicBoxMaterial;
+        
+        // 오르골 뚜껑
+        const lid = BABYLON.MeshBuilder.CreateBox("musicBoxLid", {
+            width: 2.1,
+            height: 0.1,
+            depth: 1.6
+        }, this.game.scene);
+        lid.position = new BABYLON.Vector3(-5, 1.3, 0);
+        lid.material = musicBoxMaterial;
+        
+        // 오르골 회전 피규어
+        const figure = BABYLON.MeshBuilder.CreateCylinder("musicBoxFigure", {
+            height: 0.8,
+            diameterTop: 0.2,
+            diameterBottom: 0.3
+        }, this.game.scene);
+        figure.position = new BABYLON.Vector3(-5, 1.6, 0);
+        
+        const figureMaterial = new BABYLON.StandardMaterial("figureMaterial", this.game.scene);
+        figureMaterial.diffuseColor = new BABYLON.Color3(0.8, 0.6, 0.4); // 황금색
+        figureMaterial.emissiveColor = new BABYLON.Color3(0.1, 0.08, 0.04);
+        figure.material = figureMaterial;
+        
+        // 회전 애니메이션
+        const rotationAnimation = new BABYLON.Animation(
+            "figureRotation",
+            "rotation.y",
+            30,
+            BABYLON.Animation.ANIMATIONTYPE_FLOAT,
+            BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE
+        );
+        
+        const rotationKeys = [
+            { frame: 0, value: 0 },
+            { frame: 120, value: 2 * Math.PI }
+        ];
+        rotationAnimation.setKeys(rotationKeys);
+        figure.animations.push(rotationAnimation);
+        this.game.scene.beginAnimation(figure, 0, 120, true);
+        
+        // 클릭 이벤트 설정
+        musicBox.actionManager = new BABYLON.ActionManager(this.game.scene);
+        musicBox.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
+            BABYLON.ActionManager.OnPickTrigger,
+            () => {
+                this.playMusicBoxSequence();
+            }
+        ));
+        
+        console.log('✅ 오르골 생성 완료');
+    }
+
+    private createHintPanel(): void {
+        console.log('📋 힌트 패널 생성 중...');
+        
+        // 힌트 패널 베이스
+        const hintPanel = BABYLON.MeshBuilder.CreateBox("hintPanel", {
+            width: 4,
+            height: 3,
+            depth: 0.1
+        }, this.game.scene);
+        hintPanel.position = new BABYLON.Vector3(0, 2.5, -8);
+        
+        // 힌트 패널 머티리얼
+        const panelMaterial = new BABYLON.StandardMaterial("panelMaterial", this.game.scene);
+        panelMaterial.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+        panelMaterial.emissiveColor = new BABYLON.Color3(0.05, 0.05, 0.1);
+        hintPanel.material = panelMaterial;
+        
+        // 힌트 텍스트를 위한 Dynamic Texture
+        const hintTexture = new BABYLON.DynamicTexture("hintTexture", {width: 800, height: 600}, this.game.scene);
+        hintTexture.hasAlpha = true;
+        
+        const hintText = `
+🎵 오르골 힌트 🎵
+
+끊임없이 반복되는 알파벳 패턴:
+
+M T ? T F ? S
+(요일 영어로)
+
+R ? Y G ? N P  
+(색깔 영어로)
+
+🔐 4글자 알파벳을 찾아 자물쇠를 열어라!
+        `;
+        
+        hintTexture.drawText(hintText, null, null, "24px Arial", "#00FFFF", "#000000", true);
+        
+        const hintMaterial = new BABYLON.StandardMaterial("hintMaterial", this.game.scene);
+        hintMaterial.diffuseTexture = hintTexture;
+        hintMaterial.emissiveTexture = hintTexture;
+        hintMaterial.emissiveColor = new BABYLON.Color3(0.5, 0.5, 1);
+        
+        const hintDisplay = BABYLON.MeshBuilder.CreatePlane("hintDisplay", {
+            width: 3.8,
+            height: 2.8
+        }, this.game.scene);
+        hintDisplay.position = new BABYLON.Vector3(0, 2.5, -7.95);
+        hintDisplay.material = hintMaterial;
+        
+        console.log('✅ 힌트 패널 생성 완료');
+    }
+
+    private createLockSystem(): void {
+        console.log('🔐 자물쇠 시스템 생성 중...');
+        
+        // 자물쇠 베이스
+        const lockBase = BABYLON.MeshBuilder.CreateBox("lockBase", {
+            width: 3,
+            height: 2,
+            depth: 0.5
+        }, this.game.scene);
+        lockBase.position = new BABYLON.Vector3(5, 1.5, 0);
+        
+        const lockMaterial = new BABYLON.StandardMaterial("lockMaterial", this.game.scene);
+        lockMaterial.diffuseColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+        lockMaterial.specularColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+        lockBase.material = lockMaterial;
+        
+        // 4개의 알파벳 다이얼 생성
+        this.createAlphabetDials(lockBase);
+        
+        console.log('✅ 자물쇠 시스템 생성 완료');
+    }
+
+    private createAlphabetDials(lockBase: BABYLON.Mesh): void {
+        console.log('🔤 알파벳 다이얼 생성 중...');
+        
+        const dialPositions = [
+            { x: -1.2, y: 0 },
+            { x: -0.4, y: 0 },
+            { x: 0.4, y: 0 },
+            { x: 1.2, y: 0 }
+        ];
+        
+        this.dialValues = ['A', 'A', 'A', 'A']; // 현재 다이얼 값들
+        this.dialMeshes = [];
+        
+        dialPositions.forEach((pos, index) => {
+            // 다이얼 실린더
+            const dial = BABYLON.MeshBuilder.CreateCylinder(`dial${index}`, {
+                height: 0.3,
+                diameter: 0.6
+            }, this.game.scene);
+            dial.position = new BABYLON.Vector3(
+                lockBase.position.x + pos.x,
+                lockBase.position.y + pos.y,
+                lockBase.position.z + 0.4
+            );
+            
+            // 다이얼 머티리얼
+            const dialMaterial = new BABYLON.StandardMaterial(`dialMaterial${index}`, this.game.scene);
+            dialMaterial.diffuseColor = new BABYLON.Color3(0.3, 0.3, 0.4);
+            dialMaterial.emissiveColor = new BABYLON.Color3(0.1, 0.1, 0.2);
+            dial.material = dialMaterial;
+            
+            // 알파벳 텍스처
+            const dialTexture = new BABYLON.DynamicTexture(`dialTexture${index}`, {width: 256, height: 256}, this.game.scene);
+            dialTexture.drawText('A', null, null, "bold 120px Arial", "#FFFFFF", "#000000", true);
+            
+            const textMaterial = new BABYLON.StandardMaterial(`textMaterial${index}`, this.game.scene);
+            textMaterial.diffuseTexture = dialTexture;
+            textMaterial.emissiveTexture = dialTexture;
+            textMaterial.emissiveColor = new BABYLON.Color3(0.3, 0.3, 0.3);
+            
+            const textPlane = BABYLON.MeshBuilder.CreatePlane(`textPlane${index}`, {
+                width: 0.4,
+                height: 0.4
+            }, this.game.scene);
+            textPlane.position = new BABYLON.Vector3(
+                dial.position.x,
+                dial.position.y,
+                dial.position.z + 0.16
+            );
+            textPlane.material = textMaterial;
+            
+            // 클릭 이벤트
+            dial.actionManager = new BABYLON.ActionManager(this.game.scene);
+            dial.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
+                BABYLON.ActionManager.OnPickTrigger,
+                () => {
+                    this.rotateDial(index);
+                }
+            ));
+            
+            this.dialMeshes.push({
+                dial: dial,
+                textPlane: textPlane,
+                texture: dialTexture
+            });
+        });
+        
+        console.log('✅ 알파벳 다이얼 생성 완료');
+    }
+
+    private dialValues: string[] = [];
+    private dialMeshes: any[] = [];
+    private correctAnswer = ['W', 'S', 'O', 'B'];
+
+    private rotateDial(dialIndex: number): void {
+        console.log(`🔄 다이얼 ${dialIndex} 회전`);
+        
+        // 알파벳 순환 (A-Z)
+        const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const currentIndex = alphabet.indexOf(this.dialValues[dialIndex]);
+        const nextIndex = (currentIndex + 1) % 26;
+        this.dialValues[dialIndex] = alphabet[nextIndex];
+        
+        // 텍스처 업데이트
+        const dialMesh = this.dialMeshes[dialIndex];
+        dialMesh.texture.clear();
+        dialMesh.texture.drawText(
+            this.dialValues[dialIndex], 
+            null, null, 
+            "bold 120px Arial", 
+            "#FFFFFF", 
+            "#000000", 
+            true
+        );
+        
+        // 회전 애니메이션
+        const rotationAnimation = new BABYLON.Animation(
+            `dialRotation${dialIndex}`,
+            "rotation.y",
+            60,
+            BABYLON.Animation.ANIMATIONTYPE_FLOAT,
+            BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+        );
+        
+        const keys = [
+            { frame: 0, value: dialMesh.dial.rotation.y },
+            { frame: 15, value: dialMesh.dial.rotation.y + Math.PI / 6 }
+        ];
+        rotationAnimation.setKeys(keys);
+        
+        this.game.scene.beginAnimation(dialMesh.dial, 0, 15, false, 1, () => {
+            this.checkAnswer();
+        });
+        
+        console.log(`다이얼 ${dialIndex}: ${this.dialValues[dialIndex]}`);
+    }
+
+    private checkAnswer(): void {
+        console.log('🔍 답 확인 중...', this.dialValues);
+        
+        if (JSON.stringify(this.dialValues) === JSON.stringify(this.correctAnswer)) {
+            console.log('🎉 정답! 자물쇠가 열렸습니다!');
+            this.unlockSuccess();
+        }
+    }
+
+    private unlockSuccess(): void {
+        console.log('🎊 자물쇠 해제 성공!');
+        
+        // 성공 파티클 효과
+        const successParticles = new BABYLON.ParticleSystem("successParticles", 500, this.game.scene);
+        successParticles.particleTexture = new BABYLON.Texture("https://www.babylonjs-playground.com/textures/flare.png", this.game.scene);
+        
+        successParticles.emitter = new BABYLON.Vector3(5, 1.5, 0);
+        successParticles.minEmitBox = new BABYLON.Vector3(-1, -1, -1);
+        successParticles.maxEmitBox = new BABYLON.Vector3(1, 1, 1);
+        
+        successParticles.color1 = new BABYLON.Color4(1, 1, 0, 1);
+        successParticles.color2 = new BABYLON.Color4(1, 0.5, 0, 1);
+        successParticles.colorDead = new BABYLON.Color4(0, 0, 0, 0);
+        
+        successParticles.minSize = 0.2;
+        successParticles.maxSize = 0.8;
+        successParticles.minLifeTime = 1;
+        successParticles.maxLifeTime = 3;
+        
+        successParticles.emitRate = 100;
+        successParticles.blendMode = BABYLON.ParticleSystem.BLENDMODE_ADD;
+        
+        successParticles.start();
+        
+        // 3초 후 파티클 정지
+        setTimeout(() => {
+            successParticles.stop();
+        }, 3000);
+        
+        // 축하 메시지 표시
+        this.showSuccessMessage();
+    }
+
+    private showSuccessMessage(): void {
+        // 성공 메시지 패널
+        const successPanel = BABYLON.MeshBuilder.CreatePlane("successPanel", {
+            width: 6,
+            height: 2
+        }, this.game.scene);
+        successPanel.position = new BABYLON.Vector3(0, 4, -5);
+        
+        const successTexture = new BABYLON.DynamicTexture("successTexture", {width: 1200, height: 400}, this.game.scene);
+        successTexture.drawText(
+            "🎉 축하합니다! 🎉\n방탈출 퍼즐을 해결했습니다!", 
+            null, null, 
+            "bold 48px Arial", 
+            "#FFD700", 
+            "#000000", 
+            true
+        );
+        
+        const successMaterial = new BABYLON.StandardMaterial("successMaterial", this.game.scene);
+        successMaterial.diffuseTexture = successTexture;
+        successMaterial.emissiveTexture = successTexture;
+        successMaterial.emissiveColor = new BABYLON.Color3(1, 1, 0.5);
+        successPanel.material = successMaterial;
+        
+        // 5초 후 메시지 제거
+        setTimeout(() => {
+            successPanel.dispose();
+        }, 5000);
+    }
+
+    private playMusicBoxSequence(): void {
+        console.log('🎵 오르골 시퀀스 재생');
+        
+        // 간단한 사운드 효과 (향후 확장 가능)
+        // 현재는 콘솔 로그로 힌트 제공
+        console.log('🎼 M T _ T F _ S (요일: Monday, Tuesday, ?, Thursday, Friday, ?, Sunday)');
+        console.log('🎨 R _ Y G _ N P (색깔: Red, ?, Yellow, Green, ?, Navy, Purple)');
+        console.log('💡 빠진 글자들: W(Wednesday), S(Saturday), O(Orange), B(Blue)');
+        console.log('🔑 답: W S O B');
     }
 
     private setupFloorMeshes(floorMeshes: BABYLON.AbstractMesh[]): void {
