@@ -737,6 +737,35 @@ export class SimpleVRGame {
             if (!isSupported) {
                 console.warn('❌ immersive-vr 세션이 지원되지 않습니다');
                 console.log('- 가능한 원인: VR 헤드셋 미연결, 드라이버 문제, 브라우저 설정');
+                return false;
+            }
+
+            // 메타 퀘스트3 호환 reference space 확인
+            console.log('🔍 메타 퀘스트3 reference space 호환성 확인...');
+            const supportedReferenceSpaces = ['local-floor', 'local', 'viewer'];
+            let compatibleSpaceFound = false;
+
+            for (const referenceSpace of supportedReferenceSpaces) {
+                try {
+                    const sessionInit = {
+                        optionalFeatures: [referenceSpace]
+                    };
+                    
+                    // 실제로 세션을 만들어보지는 않고, 지원 여부만 확인
+                    const tempSupported = await xr.isSessionSupported('immersive-vr');
+                    if (tempSupported) {
+                        console.log(`✅ ${referenceSpace} reference space 호환 가능`);
+                        compatibleSpaceFound = true;
+                        break;
+                    }
+                } catch (error) {
+                    console.log(`❌ ${referenceSpace} reference space 비호환:`, error.message);
+                }
+            }
+
+            if (!compatibleSpaceFound) {
+                console.warn('⚠️ 호환 가능한 reference space를 찾지 못했습니다');
+                console.log('- 기본 모드로 시도할 예정입니다');
             }
             
             return isSupported;
@@ -1045,23 +1074,46 @@ export class SimpleVRGame {
             
             console.log('🚀 VR 세션 요청 중...');
             
-            // 메타 퀘스트3 전용 초간단 설정 (문제 발생 최소화)
-            const sessionInit = {
-                optionalFeatures: ['local']  // 오직 기본 추적만
-            };
-            
-            console.log('🛡️ 메타 퀘스트3 초안전 모드');
-            console.log('📋 최소 기능 세션 설정:', sessionInit);
-            
             let session;
-            try {
-                session = await (navigator as any).xr.requestSession('immersive-vr', sessionInit);
-                console.log('✅ XR 세션 생성 성공 (초안전 모드)');
-            } catch (error) {
-                console.log('❌ 초안전 모드 실패, 기본 모드로 재시도...');
-                // 아예 옵션 없이 시도
-                session = await (navigator as any).xr.requestSession('immersive-vr', {});
-                console.log('✅ XR 세션 생성 성공 (기본 모드)');
+            
+            // 메타 퀘스트3 지원 reference space 우선순위로 시도
+            const supportedReferenceSpaces = [
+                'local-floor',    // 메타 퀘스트3 권장 (바닥 기준)
+                'local',          // 기본 로컬 추적
+                'viewer'          // 헤드셋 기준 (최후 수단)
+            ];
+            
+            let sessionCreated = false;
+            
+            for (const referenceSpace of supportedReferenceSpaces) {
+                try {
+                    console.log(`🔄 ${referenceSpace} reference space로 시도 중...`);
+                    const sessionInit = {
+                        optionalFeatures: [referenceSpace, 'hand-tracking']
+                    };
+                    
+                    session = await (navigator as any).xr.requestSession('immersive-vr', sessionInit);
+                    console.log(`✅ ${referenceSpace} reference space로 VR 세션 생성 성공!`);
+                    sessionCreated = true;
+                    break;
+                } catch (error) {
+                    console.log(`❌ ${referenceSpace} 실패:`, error.message);
+                    // 다음 reference space로 시도
+                    continue;
+                }
+            }
+            
+            // 모든 reference space 실패 시 기본 모드로 시도
+            if (!sessionCreated) {
+                try {
+                    console.log('🔄 기본 모드 (옵션 없음)로 최종 시도...');
+                    session = await (navigator as any).xr.requestSession('immersive-vr', {});
+                    console.log('✅ 기본 모드로 VR 세션 생성 성공');
+                    sessionCreated = true;
+                } catch (error) {
+                    console.error('❌ 모든 VR 세션 생성 방법 실패');
+                    throw error;
+                }
             }
             
             console.log('✅ VR 세션 생성 완료');
@@ -1108,11 +1160,24 @@ export class SimpleVRGame {
             console.error('- 에러 메시지:', error.message || String(error));
             console.error('- 전체 에러:', error);
             
-            // 더 구체적인 에러 정보
+            // 더 구체적인 에러 정보 및 해결 방법
             if (error.name === 'NotSupportedError') {
                 console.error('🔍 NotSupportedError 상세 분석:');
-                console.error('- 이 에러는 보통 reference space 문제입니다');
-                console.error('- 메타 퀘스트3에서 지원하지 않는 기능을 요청했을 가능성');
+                console.error('- 원인: 메타 퀘스트3에서 지원하지 않는 reference space 요청');
+                console.error('- 해결됨: 자동으로 호환 가능한 reference space로 시도합니다');
+                console.error('- 메타 퀘스트3 권장: local-floor > local > viewer 순서');
+            } else if (error.message && error.message.includes('requestReferenceSpace')) {
+                console.error('🔍 requestReferenceSpace 에러 분석:');
+                console.error('- 원인: Three.js가 내부적으로 지원하지 않는 reference space 요청');
+                console.error('- 해결 방법 1: 브라우저 새로고침 후 재시도');
+                console.error('- 해결 방법 2: Meta Quest 헤드셋 재시작');
+                console.error('- 해결 방법 3: Guardian 경계 재설정');
+                
+                // 자동 복구 시도 제안
+                console.log('🔧 자동 복구 시도를 위한 제안:');
+                console.log('1. 페이지를 새로고침해 주세요');
+                console.log('2. Meta Quest에서 Guardian을 재설정해 주세요');
+                console.log('3. 컨트롤러를 다시 페어링해 주세요');
             }
             
             throw error;

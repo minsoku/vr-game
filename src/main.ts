@@ -250,9 +250,18 @@ class QuestEscapeVR {
             vrButton.disabled = false;
             vrButton.textContent = 'VR 모드 시작';
             
-            // 더 자세한 에러 메시지 표시
-            const errorMessage = error instanceof Error ? error.message : 'VR 모드를 시작할 수 없습니다.';
-            alert(`VR 모드 실패: ${errorMessage}\n\n2D 모드로 계속 진행합니다.\n\n디버그 콘솔(D키)에서 자세한 정보를 확인하세요.`);
+            // Reference Space 에러 특별 처리
+            if (error instanceof Error && error.message.includes('requestReferenceSpace')) {
+                console.log('🚨 Reference Space 에러 감지 - 사용자 안내 표시');
+                const vrErrorGuide = document.getElementById('vr-error-guide');
+                if (vrErrorGuide) {
+                    vrErrorGuide.style.display = 'block';
+                }
+            } else {
+                // 일반적인 에러 메시지 표시
+                const errorMessage = error instanceof Error ? error.message : 'VR 모드를 시작할 수 없습니다.';
+                alert(`VR 모드 실패: ${errorMessage}\n\n2D 모드로 계속 진행합니다.\n\n디버그 콘솔(D키)에서 자세한 정보를 확인하세요.`);
+            }
         }
     }
 

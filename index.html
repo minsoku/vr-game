@@ -172,6 +172,88 @@
       <div id="hints">힌트: H키로 힌트 보기</div>
     </div>
 
+    <!-- VR 에러 안내 메시지 -->
+    <div
+      id="vr-error-guide"
+      style="
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(20, 20, 20, 0.95);
+        color: white;
+        padding: 30px;
+        border-radius: 15px;
+        border: 2px solid #ff6b6b;
+        max-width: 500px;
+        text-align: center;
+        z-index: 2000;
+        display: none;
+        font-family: Arial, sans-serif;
+        box-shadow: 0 0 30px rgba(255, 107, 107, 0.3);
+      "
+    >
+      <h2 style="color: #ff6b6b; margin-top: 0; font-size: 24px">
+        🚨 VR 모드 오류 발생
+      </h2>
+      <div id="vr-error-content">
+        <p style="font-size: 16px; line-height: 1.5; margin: 15px 0">
+          <strong>Reference Space 에러</strong><br />
+          메타 퀘스트3에서 지원하지 않는 기능을 요청했습니다.
+        </p>
+        <div
+          style="
+            background: rgba(0, 0, 0, 0.5);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+          "
+        >
+          <h3 style="color: #ffd93d; margin-top: 0">🔧 해결 방법:</h3>
+          <ol style="text-align: left; padding-left: 20px">
+            <li>페이지를 새로고침해 주세요</li>
+            <li>Meta Quest 헤드셋을 재시작해 주세요</li>
+            <li>Guardian 경계를 재설정해 주세요</li>
+            <li>컨트롤러를 다시 페어링해 주세요</li>
+          </ol>
+        </div>
+        <button
+          id="close-vr-error"
+          style="
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            transition: background 0.3s ease;
+          "
+          onclick="document.getElementById('vr-error-guide').style.display='none'"
+        >
+          확인
+        </button>
+        <button
+          id="reload-page"
+          style="
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            transition: background 0.3s ease;
+          "
+          onclick="window.location.reload()"
+        >
+          새로고침
+        </button>
+      </div>
+    </div>
+
     <div id="crosshair"></div>
 
     <div id="fps-guide">
