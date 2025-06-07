@@ -913,7 +913,172 @@ export class SimpleVRGame {
         this.scene.add(controller1);
         this.vrControllers[1] = controller1;
         
+        // VR 공간에 3D UI 버튼 추가
+        this.createVR3DButtons();
+        
         console.log('✅ VR 컨트롤러 이벤트 리스너 설정 완료');
+    }
+
+    private createVR3DButtons(): void {
+        // 컨트롤러 활성화 버튼 (빨간색)
+        const controllerButton = this.create3DButton(
+            '🎮', 
+            { x: -1.5, y: 1.2, z: -2 }, 
+            0xff0000, 
+            () => this.forceVRControllerActivation()
+        );
+        controllerButton.userData = { type: 'controller-activate', interactive: true };
+        this.scene.add(controllerButton);
+
+        // 디버그 토글 버튼 (초록색)
+        const debugButton = this.create3DButton(
+            '🐛', 
+            { x: -0.5, y: 1.2, z: -2 }, 
+            0x00ff00, 
+            () => this.toggleVRDebug()
+        );
+        debugButton.userData = { type: 'debug-toggle', interactive: true };
+        this.scene.add(debugButton);
+
+        // 도움말 버튼 (파란색)
+        const helpButton = this.create3DButton(
+            '❓', 
+            { x: 0.5, y: 1.2, z: -2 }, 
+            0x0000ff, 
+            () => this.showVRHelp()
+        );
+        helpButton.userData = { type: 'help', interactive: true };
+        this.scene.add(helpButton);
+
+        console.log('✅ VR 3D UI 버튼들이 생성되었습니다');
+    }
+
+    private create3DButton(text: string, position: {x: number, y: number, z: number}, color: number, onClick: () => void): THREE.Group {
+        const buttonGroup = new THREE.Group();
+
+        // 버튼 배경 (원형)
+        const geometry = new THREE.CylinderGeometry(0.15, 0.15, 0.05, 16);
+        const material = new THREE.MeshBasicMaterial({ 
+            color: color,
+            transparent: true,
+            opacity: 0.8
+        });
+        const buttonMesh = new THREE.Mesh(geometry, material);
+        buttonMesh.rotation.x = Math.PI / 2; // 평평하게 눕히기
+        buttonGroup.add(buttonMesh);
+
+        // 텍스트 (이모지는 텍스트로 표시하기 어려우므로 간단한 도형으로 대체)
+        const textGeometry = new THREE.PlaneGeometry(0.2, 0.2);
+        const textMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0xffffff,
+            transparent: true
+        });
+        const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+        textMesh.position.y = 0.03;
+        buttonGroup.add(textMesh);
+
+        // 위치 설정
+        buttonGroup.position.set(position.x, position.y, position.z);
+        
+        // 클릭 이벤트 저장
+        buttonGroup.userData.onClick = onClick;
+        buttonGroup.userData.originalColor = color;
+        buttonGroup.userData.buttonMesh = buttonMesh;
+
+        return buttonGroup;
+    }
+
+    private forceVRControllerActivation(): void {
+        console.log('🎮 VR에서 컨트롤러 활성화 시도...');
+        
+        // Gamepad API로 직접 검색
+        const gamepads = navigator.getGamepads();
+        let found = false;
+        
+        for (let i = 0; i < gamepads.length; i++) {
+            const gamepad = gamepads[i];
+            if (gamepad && gamepad.connected) {
+                found = true;
+                console.log(`🎮 컨트롤러 ${i} 활성화:`, {
+                    id: gamepad.id,
+                    axes: gamepad.axes.length,
+                    buttons: gamepad.buttons.length
+                });
+                
+                // 진동 시도
+                if (gamepad.vibrationActuator) {
+                    gamepad.vibrationActuator.playEffect('dual-rumble', {
+                        duration: 300,
+                        strongMagnitude: 0.8,
+                        weakMagnitude: 0.4
+                    }).catch(e => console.log('진동 실패:', e));
+                }
+            }
+        }
+        
+        if (!found) {
+            console.warn('⚠️ 컨트롤러를 찾을 수 없습니다. 페어링을 확인해주세요.');
+        }
+    }
+
+    private toggleVRDebug(): void {
+        console.log('🐛 VR 디버그 모드 토글');
+        // VR 환경에서는 콘솔 로그가 주요 디버깅 수단
+        console.log('=== VR 디버그 정보 ===');
+        console.log('카메라 위치:', this.camera.position);
+        console.log('컨트롤러 수:', this.vrControllers.length);
+        console.log('게임패드 상태:', this.vrGamepads.map(gp => gp ? 'connected' : 'null'));
+    }
+
+    private checkVRButtonInteraction(inputSource: any): void {
+        // 컨트롤러의 위치와 방향을 가져옴
+        const controller = this.vrControllers[inputSource.handedness === 'left' ? 0 : 1];
+        if (!controller) return;
+
+        // 레이캐스터로 VR 버튼 검사
+        const tempMatrix = new THREE.Matrix4();
+        tempMatrix.identity().extractRotation(controller.matrixWorld);
+
+        const raycaster = new THREE.Raycaster();
+        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+
+        // 3D 버튼들과의 교차점 검사
+        const intersects = raycaster.intersectObjects(this.scene.children, true);
+        
+        for (const intersect of intersects) {
+            const object = intersect.object;
+            if (object.parent && object.parent.userData.onClick) {
+                console.log('🎯 VR 버튼 클릭:', object.parent.userData.type);
+                object.parent.userData.onClick();
+                
+                // 버튼 클릭 효과 (색상 변경)
+                const buttonMesh = object.parent.userData.buttonMesh;
+                if (buttonMesh) {
+                    const originalColor = object.parent.userData.originalColor;
+                    buttonMesh.material.color.setHex(0xffffff);
+                    setTimeout(() => {
+                        buttonMesh.material.color.setHex(originalColor);
+                    }, 200);
+                }
+                break;
+            }
+        }
+    }
+
+    private showVRHelp(): void {
+        console.log('❓ VR 도움말');
+        console.log(`
+🥽 VR 모드 조작법:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🕹️ 왼쪽 조이스틱: 이동
+🔄 오른쪽 조이스틱: 회전  
+🔴 A/X 버튼: 상호작용
+🎮 컨트롤러가 인식 안되면 빨간 버튼 클릭
+🐛 문제 발생시 초록 버튼으로 디버그
+❓ 파란 버튼으로 이 도움말 다시 보기
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        `);
     }
 
     private updateVRMovement(): void {
@@ -969,16 +1134,22 @@ export class SimpleVRGame {
                     });
                 }
                 
-                // 버튼 입력 먼저 테스트
-                if (gamepad.buttons && gamepad.buttons.length > 0) {
-                    for (let b = 0; b < Math.min(gamepad.buttons.length, 8); b++) {
-                        if (gamepad.buttons[b].pressed) {
-                            console.log(`🔴 ${inputSource.handedness} 버튼 ${b} 눌림!`);
-                            // 버튼으로 테스트 이동
-                            this.testButtonMovement(b, inputSource.handedness);
+                                    // 버튼 입력 먼저 테스트
+                    if (gamepad.buttons && gamepad.buttons.length > 0) {
+                        for (let b = 0; b < Math.min(gamepad.buttons.length, 8); b++) {
+                            if (gamepad.buttons[b].pressed) {
+                                console.log(`🔴 ${inputSource.handedness} 버튼 ${b} 눌림!`);
+                                
+                                // A 버튼 (인덱스 0) 또는 트리거 (인덱스 1)으로 VR 버튼 클릭 확인
+                                if (b === 0 || b === 1) {
+                                    this.checkVRButtonInteraction(inputSource);
+                                }
+                                
+                                // 버튼으로 테스트 이동
+                                this.testButtonMovement(b, inputSource.handedness);
+                            }
                         }
                     }
-                }
                 
                 // axes 입력 체크 (모든 축 확인)
                 if (gamepad.axes && gamepad.axes.length >= 2) {
