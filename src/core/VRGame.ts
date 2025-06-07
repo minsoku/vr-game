@@ -1,5 +1,7 @@
 // @ts-nocheck
 import * as THREE from 'three';
+import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
+import { XRHandModelFactory } from 'three/examples/jsm/webxr/XRHandModelFactory.js';
 
 import { SceneManager } from './SceneManager';
 import { InputManager } from './InputManager';

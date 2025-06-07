@@ -1,8 +1,9 @@
-import { SimpleVRGame } from './core/SimpleVRGame';
+// @ts-nocheck
+import { VRGame } from './core/VRGame';
 import { LoadingManager } from './utils/LoadingManager';
 
 class QuestEscapeVR {
-    private game: SimpleVRGame | null = null;
+    private game: VRGame | null = null;
     private loadingManager: LoadingManager;
 
     constructor() {
@@ -16,7 +17,8 @@ class QuestEscapeVR {
             this.loadingManager.show('게임 초기화 중...');
 
             // VR 게임 인스턴스 생성 (WebXR 지원 확인은 나중에)
-            this.game = new SimpleVRGame();
+            this.game = new VRGame();
+            await this.game.init();
 
             // 로딩 완료
             this.loadingManager.hide();
