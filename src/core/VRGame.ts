@@ -59,9 +59,9 @@ export class VRGame {
         // 씬 생성
         this.scene = new BABYLON.Scene(this.engine);
         
-        // 카메라 생성 (Horror Room에 적합한 위치)
-        this.camera = new BABYLON.FreeCamera("camera", new BABYLON.Vector3(0, 1.8, 5), this.scene);
-        this.camera.setTarget(new BABYLON.Vector3(0, 1.5, 0));
+        // 카메라 생성 (Horror Room 바로 앞에 위치)
+        this.camera = new BABYLON.FreeCamera("camera", new BABYLON.Vector3(0, 1.8, 0.5), this.scene);
+        this.camera.setTarget(new BABYLON.Vector3(0, 1.5, -1));
         
         // 카메라 컨트롤 설정 (안전한 방법)
         try {
@@ -77,9 +77,9 @@ export class VRGame {
             this.setupManualCameraControls();
         }
         
-        // 카메라 속성 설정
+        // 카메라 속성 설정 (2배 크기 환경에 맞게 조정)
         if (this.camera instanceof BABYLON.FreeCamera) {
-            this.camera.speed = 0.5;
+            this.camera.speed = 1.0; // 2배 크기에 맞게 이동 속도 증가
             this.camera.angularSensibility = 2000;
         }
 
@@ -87,13 +87,13 @@ export class VRGame {
         const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), this.scene);
         light.intensity = 0.7;
 
-        // 기본 환경 설정
-        this.scene.createDefaultEnvironment({
-            createGround: true,
-            groundSize: 50,
-            createSkybox: true,
-            skyboxSize: 100
-        });
+        // 기본 환경 설정 제거 (SceneManager에서 커스텀 환경 생성)
+        // this.scene.createDefaultEnvironment({
+        //     createGround: true,
+        //     groundSize: 50,
+        //     createSkybox: true,
+        //     skyboxSize: 100
+        // });
 
         console.log('✅ Babylon.js 씬 초기화 완료');
     }
@@ -206,19 +206,23 @@ export class VRGame {
                     defaultTargetMeshOptions: {
                         teleportationFillColor: "#55FF99",
                         teleportationBorderColor: "#888888"
-                    }
+                    },
+                    timeToTeleport: 3000,
+                    teleportationTargetMesh: undefined,
+                    pickBlockerMeshes: [],
+                    maxRange: 20.0 // 2배 크기에 맞게 텔레포트 거리 증가
                 });
-                console.log('📍 텔레포트 기능 활성화됨');
+                console.log('📍 텔레포트 기능 활성화됨 (거리 20m)');
 
-                // 스무스 로코모션 (조이스틱 이동)
+                // 스무스 로코모션 (조이스틱 이동) - 2배 크기 환경에 맞게 조정
                 const locomotion = featureManager.enableFeature(BABYLON.WebXRFeatureName.MOVEMENT, "stable", {
                     xrInput: this.xrHelper.input,
                     movementEnabled: true,
                     rotationEnabled: true,
-                    movementSpeed: 4.0,
+                    movementSpeed: 8.0, // 2배 크기에 맞게 이동 속도 증가
                     rotationSpeed: 0.25
                 });
-                console.log('🚶 스무스 로코모션 활성화됨');
+                console.log('🚶 스무스 로코모션 활성화됨 (속도 8.0)');
             } catch (error) {
                 console.log('⚠️ 이동 기능 활성화 실패:', error);
             }

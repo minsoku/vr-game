@@ -14,10 +14,10 @@ export class VRController {
     private leftController: BABYLON.WebXRInputSource | null = null;
     private rightController: BABYLON.WebXRInputSource | null = null;
     
-    // 이동 설정
-    private moveSpeed: number = 6.0; // m/s (조이스틱 이동 속도 증가)
+    // 이동 설정 (2배 크기 환경에 맞게 조정)
+    private moveSpeed: number = 12.0; // m/s (2배 크기에 맞게 증가)
     private turnSpeed: number = Math.PI; // 라디안/초
-    private teleportMaxDistance: number = 10.0; // 최대 텔레포트 거리
+    private teleportMaxDistance: number = 20.0; // 최대 텔레포트 거리 (2배 크기에 맞게 증가)
     
     // 텔레포트 시스템
     private teleportMarker: BABYLON.Mesh | null = null;

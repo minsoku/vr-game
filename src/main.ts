@@ -196,7 +196,7 @@ class QuestEscapeVR {
     }
 
     private setupUI(): void {
-        const vrButton = document.getElementById('vr-button') as HTMLButtonElement;
+        const vrButton = document.getElementById('vrButton') as HTMLButtonElement;
         const uiOverlay = document.getElementById('ui-overlay') as HTMLDivElement;
 
         if (vrButton && this.game) {

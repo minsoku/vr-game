@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Horror Room VR - 무서운 방탈출 게임</title>
+    <title>Atmospheric Lights VR</title>
     <meta
       name="description"
       content="메타퀘스트 3 기반 무서운 VR 방탈출 게임"
@@ -16,9 +16,155 @@
       body {
         margin: 0;
         padding: 0;
-        background: #000;
         font-family: "Arial", sans-serif;
+        background: linear-gradient(
+          135deg,
+          #0c0c0c 0%,
+          #1a0000 50%,
+          #000000 100%
+        );
         overflow: hidden;
+        color: #ff4444;
+      }
+
+      #renderCanvas {
+        width: 100%;
+        height: 100vh;
+        display: block;
+        outline: none;
+        cursor: crosshair;
+      }
+
+      .loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(
+          circle,
+          #1a0000 0%,
+          #0c0c0c 70%,
+          #000000 100%
+        );
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        transition: opacity 0.5s ease-out;
+      }
+
+      .loading-screen.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .horror-title {
+        font-size: 3rem;
+        font-weight: bold;
+        color: #ff1a1a;
+        text-shadow: 0 0 20px #ff0000, 0 0 40px #ff0000;
+        margin-bottom: 2rem;
+        letter-spacing: 2px;
+        animation: pulse 2s infinite;
+      }
+
+      .loading-text {
+        font-size: 1.2rem;
+        color: #cc3333;
+        margin-bottom: 2rem;
+        text-align: center;
+        animation: fade 1.5s infinite alternate;
+      }
+
+      .loading-bar {
+        width: 300px;
+        height: 4px;
+        background: #330000;
+        border-radius: 2px;
+        overflow: hidden;
+        margin-bottom: 1rem;
+      }
+
+      .loading-progress {
+        height: 100%;
+        background: linear-gradient(90deg, #ff4444, #ff0000, #ff4444);
+        width: 0%;
+        transition: width 0.3s ease;
+        animation: shimmer 2s infinite;
+      }
+
+      .vr-button {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: linear-gradient(45deg, #ff4444, #cc0000);
+        color: white;
+        border: none;
+        padding: 15px 25px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        box-shadow: 0 4px 15px rgba(255, 68, 68, 0.3);
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .vr-button:hover {
+        background: linear-gradient(45deg, #ff6666, #ff1a1a);
+        box-shadow: 0 6px 20px rgba(255, 68, 68, 0.5);
+        transform: translateY(-2px);
+      }
+
+      .vr-button:disabled {
+        background: #666;
+        cursor: not-allowed;
+        box-shadow: none;
+        transform: none;
+      }
+
+      .controls-info {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        background: rgba(0, 0, 0, 0.8);
+        color: #ff4444;
+        padding: 15px;
+        border-radius: 8px;
+        font-size: 14px;
+        border: 1px solid #ff4444;
+        box-shadow: 0 0 15px rgba(255, 68, 68, 0.3);
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.7;
+        }
+      }
+
+      @keyframes fade {
+        0% {
+          opacity: 0.5;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+
+      @keyframes shimmer {
+        0% {
+          background-position: -300px 0;
+        }
+        100% {
+          background-position: 300px 0;
+        }
       }
 
       #loading {
@@ -163,17 +309,29 @@
     </style>
   </head>
   <body>
-    <div id="loading">
-      <h1>👻 Horror Room VR</h1>
-      <p>무서운 방탈출 게임을 로딩중...</p>
-      <p style="font-size: 0.9rem; opacity: 0.8">
-        Horror Room 에셋들을 로딩하고 있습니다...
-      </p>
-      <p style="font-size: 0.8rem; opacity: 0.6">
-        ⚠️ 개발자 도구(F12)에서 로딩 상태를 확인하세요
-      </p>
-      <div class="spinner"></div>
+    <!-- 로딩 화면 -->
+    <div id="loadingScreen" class="loading-screen">
+      <h1 class="horror-title">ATMOSPHERIC LIGHTS VR</h1>
+      <p class="loading-text">신비로운 불빛 세계로 들어가는 중...</p>
+      <div class="loading-bar">
+        <div id="loadingProgress" class="loading-progress"></div>
+      </div>
+      <p style="color: #888; font-size: 0.9rem">Meta Quest 3 VR 지원</p>
     </div>
+
+    <!-- 컨트롤 정보 -->
+    <div class="controls-info">
+      <strong>🎮 조작법</strong><br />
+      • WASD: 이동<br />
+      • 마우스: 시점 변경<br />
+      • VR: 컨트롤러 조이스틱 이동
+    </div>
+
+    <!-- 메인 캔버스 -->
+    <canvas id="renderCanvas"></canvas>
+
+    <!-- VR 진입 버튼 -->
+    <button id="vrButton" class="vr-button" disabled>🥽 VR 모드 진입</button>
 
     <div id="ui-overlay" style="display: none">
       <div id="timer">시간: 00:00</div>
