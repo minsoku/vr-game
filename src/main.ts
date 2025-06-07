@@ -227,6 +227,14 @@ class QuestEscapeVR {
             console.log('🚀 VR 모드 시작 시도...');
             await this.game.startVR();
             console.log('✅ VR 모드 시작 성공!');
+            
+            // VR 가이드 표시
+            const vrGuide = document.getElementById('vr-guide');
+            const fpsGuide = document.getElementById('fps-guide');
+            if (vrGuide && fpsGuide) {
+                vrGuide.style.display = 'block';
+                fpsGuide.style.display = 'none';
+            }
         } catch (error) {
             console.error('❌ VR 모드 시작 실패:', error);
             console.error('❌ 에러 상세:', {

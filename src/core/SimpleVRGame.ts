@@ -1,6 +1,7 @@
 // @ts-nocheck
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRController } from './VRController';
 
 export class SimpleVRGame {
     public scene: any;
@@ -40,6 +41,9 @@ export class SimpleVRGame {
     
     // 3D 모델 로더
     private gltfLoader: GLTFLoader;
+    
+    // VR 컨트롤러
+    private vrController: VRController | null = null;
 
     constructor() {
         this.scene = new THREE.Scene();
@@ -512,8 +516,13 @@ export class SimpleVRGame {
     private animate(): void {
         this.animationId = requestAnimationFrame(() => this.animate());
         
-        // FPS 스타일 이동 처리
-        if (this.isPointerLocked) {
+        // VR 컨트롤러 업데이트 (VR 모드일 때)
+        if (this.vrController && this.renderer.xr.isPresenting) {
+            this.vrController.update();
+        }
+        
+        // FPS 스타일 이동 처리 (2D 모드일 때)
+        if (this.isPointerLocked && !this.renderer.xr.isPresenting) {
             this.handleMovement();
         }
         
@@ -764,9 +773,18 @@ export class SimpleVRGame {
             await this.renderer.xr.setSession(session);
             console.log('🥽 VR 모드 활성화 완료');
             
+            // VR 컨트롤러 초기화
+            console.log('🎮 VR 컨트롤러 초기화 중...');
+            this.vrController = new VRController(this);
+            console.log('✅ VR 컨트롤러 준비 완료');
+            
             // VR 세션 이벤트 리스너
             session.addEventListener('end', () => {
                 console.log('🔚 VR 세션 종료됨');
+                if (this.vrController) {
+                    this.vrController.dispose();
+                    this.vrController = null;
+                }
                 this.renderer.setAnimationLoop(null);
             });
             
@@ -795,6 +813,12 @@ export class SimpleVRGame {
         if (this.animationId) {
             cancelAnimationFrame(this.animationId);
         }
+        
+        if (this.vrController) {
+            this.vrController.dispose();
+            this.vrController = null;
+        }
+        
         this.renderer.dispose();
     }
 } 
